@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IDR ⇄ THB Currency Converter</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <form class="converter" autocomplete="off" onsubmit="return false;">
+      <div class="box-title">Currency Converter</div>
+      <div class="field">
+        <label for="idr">IDR <span id="idr-rate" class="rate-info"></span></label>
+        <input id="idr" type="number" inputmode="decimal" placeholder="0" min="0" step="any">
+      </div>
+      <div class="arrow-box">
+        <svg class="arrow-svg" aria-hidden="true" viewBox="0 0 24 36">
+          <path d="M12 5v26M12 5l-6 6M12 5l6 6" />
+          <path d="M12 31V5M12 31l-6-6M12 31l6-6" />
+        </svg>
+      </div>
+      <div class="field">
+        <label for="thb">THB <span id="thb-rate" class="rate-info"></span></label>
+        <input id="thb" type="number" inputmode="decimal" placeholder="0" min="0" step="any">
+      </div>
+    </form>
+  </div>
+  <script>
+    // Set your conversion rate here (example: 1 THB = 502.7 IDR)
+    const RATE_IDR_PER_THB = 502.7;
+    const idr = document.getElementById('idr');
+    const thb = document.getElementById('thb');
+    let lastEdited = null;
+
+    // Show rates next to currency codes
+    document.getElementById('idr-rate').textContent = `(1 IDR = ${(1 / RATE_IDR_PER_THB).toFixed(4)} THB)`;
+    document.getElementById('thb-rate').textContent = `(1 THB = ${RATE_IDR_PER_THB.toFixed(2)} IDR)`;
+
+    idr.addEventListener('input', function() {
+      if (lastEdited === 'thb') return;
+      lastEdited = 'idr';
+      const val = parseFloat(idr.value);
+      thb.value = val ? (val / RATE_IDR_PER_THB).toFixed(2) : '';
+      lastEdited = null;
+    });
+    thb.addEventListener('input', function() {
+      if (lastEdited === 'idr') return;
+      lastEdited = 'thb';
+      const val = parseFloat(thb.value);
+      idr.value = val ? (val * RATE_IDR_PER_THB).toFixed(0) : '';
+      lastEdited = null;
+    });
+  </script>
+</body>
+</html>

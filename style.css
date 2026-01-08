@@ -82,6 +82,35 @@ input[type="number"]:focus {
   background: #fff;
 }
 
+/* === Currency Selector === */
+.currency-selector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.currency-selector label {
+  font-size: 0.875rem;
+  color: #666;
+  margin-bottom: 0;
+}
+select {
+  font-size: 1rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 0.5rem;
+  background: #f4f4f4;
+  outline: none;
+  transition: border 0.2s;
+  cursor: pointer;
+  min-width: 6rem;
+}
+select:focus {
+  border: 1.5px solid #007aff;
+  background: #fff;
+}
+
 /* === Arrow Section === */
 .arrow-box {
   display: flex;

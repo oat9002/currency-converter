@@ -116,3 +116,157 @@ secondCurrency.addEventListener('input', function() {
   }
   lastEdited = null;
 });
+
+// Camera functionality
+const cameraBtn = document.getElementById('camera-btn');
+const cameraModal = document.getElementById('camera-modal');
+const cameraVideo = document.getElementById('camera-video');
+const cameraCanvas = document.getElementById('camera-canvas');
+const closeCameraBtn = document.getElementById('close-camera');
+const stopCameraBtn = document.getElementById('stop-camera');
+const captureBtn = document.getElementById('capture-btn');
+const ocrStatus = document.getElementById('ocr-status');
+let stream = null;
+
+// Open camera modal
+cameraBtn.addEventListener('click', async function() {
+  cameraModal.style.display = 'flex';
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { 
+        facingMode: 'environment', // Use back camera on mobile
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      } 
+    });
+    cameraVideo.srcObject = stream;
+  } catch (error) {
+    console.error('Error accessing camera:', error);
+    alert('Unable to access camera. Please check permissions.');
+    cameraModal.style.display = 'none';
+  }
+});
+
+// Close camera modal
+function closeCamera() {
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+    stream = null;
+  }
+  cameraVideo.srcObject = null;
+  cameraModal.style.display = 'none';
+  ocrStatus.style.display = 'none';
+  ocrStatus.innerHTML = '<div class="ocr-spinner"></div><span>Reading numbers...</span>';
+  captureBtn.disabled = false;
+}
+
+closeCameraBtn.addEventListener('click', closeCamera);
+stopCameraBtn.addEventListener('click', closeCamera);
+
+// Close modal when clicking outside
+cameraModal.addEventListener('click', function(e) {
+  if (e.target === cameraModal) {
+    closeCamera();
+  }
+});
+
+// Extract numbers from text
+function extractNumbers(text) {
+  // Remove all non-numeric characters except dots, commas, and spaces
+  // This handles formats like "1,234.56" or "1234.56" or "1 234.56"
+  const cleaned = text.replace(/[^\d.,\s]/g, '');
+  // Find all number patterns (including decimals and commas)
+  const numberPatterns = cleaned.match(/[\d.,]+/g);
+  if (!numberPatterns || numberPatterns.length === 0) {
+    return null;
+  }
+  
+  // Get the largest number (likely the main amount)
+  let largestNumber = null;
+  let largestValue = 0;
+  
+  numberPatterns.forEach(pattern => {
+    // Replace comma with nothing (handle thousand separators)
+    const numStr = pattern.replace(/,/g, '');
+    const num = parseFloat(numStr);
+    if (!isNaN(num) && num > largestValue) {
+      largestValue = num;
+      largestNumber = num;
+    }
+  });
+  
+  return largestNumber;
+}
+
+// Capture photo and perform OCR
+captureBtn.addEventListener('click', async function() {
+  const context = cameraCanvas.getContext('2d');
+  cameraCanvas.width = cameraVideo.videoWidth;
+  cameraCanvas.height = cameraVideo.videoHeight;
+  context.drawImage(cameraVideo, 0, 0);
+  
+  // Show OCR status
+  ocrStatus.style.display = 'flex';
+  captureBtn.disabled = true;
+  
+  try {
+    // Convert canvas to image data for Tesseract
+    const imageData = cameraCanvas.toDataURL('image/png');
+    
+    // Perform OCR using Tesseract.js
+    const { data: { text } } = await Tesseract.recognize(imageData, 'eng', {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          // You can update progress here if needed
+          console.log('OCR progress:', Math.round(m.progress * 100) + '%');
+        }
+      }
+    });
+    
+    console.log('OCR Text:', text);
+    
+    // Extract numbers from the OCR text
+    const extractedNumber = extractNumbers(text);
+    
+    if (extractedNumber !== null && !isNaN(extractedNumber)) {
+      // Get the selected currency
+      const selectedCurrency = currencySelect.value;
+      
+      // Populate the source currency field (IDR or PHP) with the extracted number
+      if (selectedCurrency === 'idr') {
+        secondCurrency.value = extractedNumber.toFixed(0);
+      } else {
+        secondCurrency.value = extractedNumber.toFixed(2);
+      }
+      
+      // Trigger conversion from source currency to THB
+      const val = parseFloat(secondCurrency.value);
+      if (val) {
+        lastEdited = 'second';
+        const converted = convertToTHB(val, selectedCurrency);
+        thb.value = converted.toFixed(2);
+        lastEdited = null;
+      }
+      
+      // Show success message briefly
+      const currencyName = selectedCurrency.toUpperCase();
+      ocrStatus.innerHTML = '<span style="color: #4caf50;">✓ Number detected: ' + extractedNumber.toFixed(2) + ' ' + currencyName + '</span>';
+      setTimeout(() => {
+        closeCamera();
+      }, 1500);
+    } else {
+      ocrStatus.innerHTML = '<span style="color: #ff3b30;">No numbers found. Try again.</span>';
+      setTimeout(() => {
+        ocrStatus.style.display = 'none';
+        captureBtn.disabled = false;
+      }, 2000);
+    }
+  } catch (error) {
+    console.error('OCR Error:', error);
+    ocrStatus.innerHTML = '<span style="color: #ff3b30;">Error reading image. Please try again.</span>';
+    setTimeout(() => {
+      ocrStatus.style.display = 'none';
+      captureBtn.disabled = false;
+    }, 2000);
+  }
+});

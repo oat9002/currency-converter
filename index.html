@@ -19,6 +19,13 @@
           <option value="php">PHP</option>
         </select>
       </div>
+      <button id="camera-btn" class="camera-btn" type="button" aria-label="Open camera">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+          <circle cx="12" cy="13" r="4"></circle>
+        </svg>
+        <span>Camera</span>
+      </button>
       <div class="field">
         <label for="thb">THB <span id="thb-rate" class="rate-info"></span></label>
         <input id="thb" type="number" inputmode="decimal" placeholder="0" min="0" step="any">
@@ -35,6 +42,28 @@
       </div>
     </form>
   </div>
+  
+  <!-- Camera Modal -->
+  <div id="camera-modal" class="camera-modal" style="display: none;">
+    <div class="camera-modal-content">
+      <div class="camera-modal-header">
+        <h3>Camera</h3>
+        <button id="close-camera" class="close-btn" aria-label="Close camera">×</button>
+      </div>
+      <video id="camera-video" autoplay playsinline></video>
+      <canvas id="camera-canvas" style="display: none;"></canvas>
+      <div id="ocr-status" class="ocr-status" style="display: none;">
+        <div class="ocr-spinner"></div>
+        <span>Reading numbers...</span>
+      </div>
+      <div class="camera-controls">
+        <button id="capture-btn" class="capture-btn" type="button">Capture</button>
+        <button id="stop-camera" class="stop-btn" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

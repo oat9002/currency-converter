@@ -4,8 +4,9 @@ const RATE_IDR_PER_THB = 535.46;  // 1 THB = 535.46 IDR
 const RATE_PHP_PER_THB = 1.88;    // 1 THB = 1.88 PHP
 const RATE_JPY_PER_THB = 5.01;     // 1 THB = 5.01 JPY
 
-// LocalStorage key
+// LocalStorage keys
 const STORAGE_KEY = 'currencyConverter_selectedCurrency';
+const THEME_STORAGE_KEY = 'currencyConverter_theme';
 
 // Get elements
 const thb = document.getElementById('thb');
@@ -280,3 +281,60 @@ captureBtn.addEventListener('click', async function() {
     }, 2000);
   }
 });
+
+// Theme toggle functionality
+function initThemeToggle() {
+  const themeToggle = document.getElementById('theme-toggle');
+  const sunIcon = document.getElementById('sun-icon');
+  const moonIcon = document.getElementById('moon-icon');
+  const body = document.body;
+
+  if (!themeToggle || !sunIcon || !moonIcon) {
+    console.error('Theme toggle elements not found');
+    return;
+  }
+
+  // Load saved theme from localStorage
+  function loadSavedTheme() {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    if (savedTheme === 'dark') {
+      body.classList.add('dark-theme');
+      sunIcon.style.display = 'none';
+      moonIcon.style.display = 'block';
+    } else {
+      body.classList.remove('dark-theme');
+      sunIcon.style.display = 'block';
+      moonIcon.style.display = 'none';
+    }
+  }
+
+  // Save theme to localStorage
+  function saveTheme(theme) {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }
+
+  // Load theme on init
+  loadSavedTheme();
+
+  // Toggle theme
+  themeToggle.addEventListener('click', function() {
+    if (body.classList.contains('dark-theme')) {
+      body.classList.remove('dark-theme');
+      sunIcon.style.display = 'block';
+      moonIcon.style.display = 'none';
+      saveTheme('light');
+    } else {
+      body.classList.add('dark-theme');
+      sunIcon.style.display = 'none';
+      moonIcon.style.display = 'block';
+      saveTheme('dark');
+    }
+  });
+}
+
+// Initialize theme toggle when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initThemeToggle);
+} else {
+  initThemeToggle();
+}

@@ -316,8 +316,8 @@ function initThemeToggle() {
   // Load theme on init
   loadSavedTheme();
 
-  // Toggle theme
-  themeToggle.addEventListener('click', function() {
+  // Toggle theme function
+  function toggleTheme() {
     if (body.classList.contains('dark-theme')) {
       body.classList.remove('dark-theme');
       sunIcon.style.display = 'block';
@@ -329,7 +329,20 @@ function initThemeToggle() {
       moonIcon.style.display = 'block';
       saveTheme('dark');
     }
+  }
+
+  // Add both click and touchstart for better iOS support
+  themeToggle.addEventListener('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleTheme();
   });
+  
+  themeToggle.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleTheme();
+  }, { passive: false });
 }
 
 // Initialize theme toggle when DOM is ready

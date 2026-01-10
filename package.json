@@ -2,7 +2,7 @@
   "name": "currency-converter",
   "version": "1.0.0",
   "private": true,
-  "description": "Minimal IDR ⇄ THB currency converter for Firebase Hosting.",
+  "description": "Minimal currency converter for Firebase Hosting.",
   "scripts": {
     "firebase": "firebase",
     "deploy": "firebase deploy",

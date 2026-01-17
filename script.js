@@ -298,11 +298,11 @@ function initThemeToggle() {
   function loadSavedTheme() {
     const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
     if (savedTheme === 'dark') {
-      body.classList.add('dark-theme');
+      document.documentElement.classList.add('dark');
       sunIcon.style.display = 'none';
       moonIcon.style.display = 'block';
     } else {
-      body.classList.remove('dark-theme');
+      document.documentElement.classList.remove('dark');
       sunIcon.style.display = 'block';
       moonIcon.style.display = 'none';
     }
@@ -318,13 +318,13 @@ function initThemeToggle() {
 
   // Toggle theme function
   function toggleTheme() {
-    if (body.classList.contains('dark-theme')) {
-      body.classList.remove('dark-theme');
+    if (document.documentElement.classList.contains('dark')) {
+      document.documentElement.classList.remove('dark');
       sunIcon.style.display = 'block';
       moonIcon.style.display = 'none';
       saveTheme('light');
     } else {
-      body.classList.add('dark-theme');
+      document.documentElement.classList.add('dark');
       sunIcon.style.display = 'none';
       moonIcon.style.display = 'block';
       saveTheme('dark');

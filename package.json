@@ -5,10 +5,14 @@
   "description": "Minimal currency converter for Firebase Hosting.",
   "scripts": {
     "firebase": "firebase",
-    "deploy": "firebase deploy",
-    "serve": "firebase serve"
+    "build": "npx @tailwindcss/cli -i ./style.css -o ./tailwind.css --minify",
+    "watch": "npx @tailwindcss/cli -i ./style.css -o ./tailwind.css --watch",
+    "deploy": "npm run build && firebase deploy",
+    "serve": "npm run build && firebase serve"
   },
   "devDependencies": {
-    "firebase-tools": "^13.0.0"
+    "@tailwindcss/cli": "^4.3.2",
+    "firebase-tools": "^13.0.0",
+    "tailwindcss": "^4.3.2"
   }
 }

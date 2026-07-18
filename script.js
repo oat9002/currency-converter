@@ -1,12 +1,7 @@
 // Exchange rates
 const API_URL = 'https://latest.currency-api.pages.dev/v1/currencies/thb.json';
-const RATES_STORAGE_KEY = 'currencyConverter_rates';
-const RATES_TIMESTAMP_KEY = 'currencyConverter_rates_timestamp';
+const STORAGE_KEY = 'currencyConverter_state';
 const RATES_TTL_MS = 24 * 60 * 60 * 1000;
-
-// LocalStorage keys
-const STORAGE_KEY = 'currencyConverter_selectedCurrency';
-const THEME_STORAGE_KEY = 'currencyConverter_theme';
 
 // Get elements
 const thb = document.getElementById('thb');
@@ -21,13 +16,32 @@ let exchangeRates = {
   jpy: null
 };
 
+function readStorageState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (error) {
+    console.warn('Unable to read currency converter storage:', error);
+    return {};
+  }
+}
+
+function writeStorageState(state = {}) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.warn('Unable to write currency converter storage:', error);
+  }
+}
+
 function getCachedRates() {
   try {
-    const cached = localStorage.getItem(RATES_STORAGE_KEY);
-    const timestamp = Number(localStorage.getItem(RATES_TIMESTAMP_KEY));
+    const state = readStorageState();
+    const cached = state.rates;
+    const timestamp = Number(state.ratesTimestamp);
 
     if (cached && timestamp && Date.now() - timestamp < RATES_TTL_MS) {
-      return JSON.parse(cached);
+      return cached;
     }
   } catch (error) {
     console.warn('Unable to read cached exchange rates:', error);
@@ -37,8 +51,10 @@ function getCachedRates() {
 }
 
 function saveRatesToCache(ratesData) {
-  localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify(ratesData));
-  localStorage.setItem(RATES_TIMESTAMP_KEY, Date.now().toString());
+  const state = readStorageState();
+  state.rates = ratesData;
+  state.ratesTimestamp = Date.now();
+  writeStorageState(state);
 }
 
 function getSelectedRate(currency) {
@@ -87,7 +103,8 @@ async function loadExchangeRates() {
 
 // Load saved currency selection from localStorage
 function loadSavedCurrency() {
-  const saved = localStorage.getItem(STORAGE_KEY);
+  const state = readStorageState();
+  const saved = state.selectedCurrency;
   if (saved === 'idr' || saved === 'php' || saved === 'jpy') {
     currencySelect.value = saved;
   }
@@ -96,7 +113,9 @@ function loadSavedCurrency() {
 
 // Save currency selection to localStorage
 function saveCurrencySelection(currency) {
-  localStorage.setItem(STORAGE_KEY, currency);
+  const state = readStorageState();
+  state.selectedCurrency = currency;
+  writeStorageState(state);
 }
 
 // Update the display based on selected currency
@@ -354,7 +373,8 @@ function initThemeToggle() {
 
   // Load saved theme from localStorage
   function loadSavedTheme() {
-    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    const state = readStorageState();
+    const savedTheme = state.theme;
     if (savedTheme === 'dark') {
       document.documentElement.classList.add('dark');
       sunIcon.style.display = 'none';
@@ -368,7 +388,9 @@ function initThemeToggle() {
 
   // Save theme to localStorage
   function saveTheme(theme) {
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    const state = readStorageState();
+    state.theme = theme;
+    writeStorageState(state);
   }
 
   // Load theme on init

@@ -1,8 +1,8 @@
-// Set your conversion rates here
-// Base currency: THB
-const RATE_IDR_PER_THB = 535.46;  // 1 THB = 535.46 IDR
-const RATE_PHP_PER_THB = 1.88;    // 1 THB = 1.88 PHP
-const RATE_JPY_PER_THB = 5.01;     // 1 THB = 5.01 JPY
+// Exchange rates
+const API_URL = 'https://latest.currency-api.pages.dev/v1/currencies/thb.json';
+const RATES_STORAGE_KEY = 'currencyConverter_rates';
+const RATES_TIMESTAMP_KEY = 'currencyConverter_rates_timestamp';
+const RATES_TTL_MS = 24 * 60 * 60 * 1000;
 
 // LocalStorage keys
 const STORAGE_KEY = 'currencyConverter_selectedCurrency';
@@ -15,6 +15,75 @@ const secondCurrencyLabel = document.getElementById('second-currency-label');
 const secondCurrencyRate = document.getElementById('second-currency-rate');
 const currencySelect = document.getElementById('currency-select');
 let lastEdited = null;
+let exchangeRates = {
+  idr: null,
+  php: null,
+  jpy: null
+};
+
+function getCachedRates() {
+  try {
+    const cached = localStorage.getItem(RATES_STORAGE_KEY);
+    const timestamp = Number(localStorage.getItem(RATES_TIMESTAMP_KEY));
+
+    if (cached && timestamp && Date.now() - timestamp < RATES_TTL_MS) {
+      return JSON.parse(cached);
+    }
+  } catch (error) {
+    console.warn('Unable to read cached exchange rates:', error);
+  }
+
+  return null;
+}
+
+function saveRatesToCache(ratesData) {
+  localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify(ratesData));
+  localStorage.setItem(RATES_TIMESTAMP_KEY, Date.now().toString());
+}
+
+function getSelectedRate(currency) {
+  if (currency === 'idr') return exchangeRates.idr;
+  if (currency === 'php') return exchangeRates.php;
+  if (currency === 'jpy') return exchangeRates.jpy;
+  return null;
+}
+
+function applyRates(ratesData) {
+  exchangeRates = {
+    idr: ratesData.idr ?? null,
+    php: ratesData.php ?? null,
+    jpy: ratesData.jpy ?? null
+  };
+  updateCurrencyDisplay();
+}
+
+async function loadExchangeRates() {
+  const cachedRates = getCachedRates();
+  if (cachedRates) {
+    applyRates(cachedRates);
+  }
+
+  try {
+    const response = await fetch(API_URL);
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    const fetchedRates = {
+      idr: data?.thb?.idr ?? null,
+      php: data?.thb?.php ?? null,
+      jpy: data?.thb?.jpy ?? null
+    };
+
+    if (fetchedRates.idr && fetchedRates.php && fetchedRates.jpy) {
+      saveRatesToCache(fetchedRates);
+      applyRates(fetchedRates);
+    }
+  } catch (error) {
+    console.error('Unable to fetch exchange rates:', error);
+  }
+}
 
 // Load saved currency selection from localStorage
 function loadSavedCurrency() {
@@ -33,28 +102,28 @@ function saveCurrencySelection(currency) {
 // Update the display based on selected currency
 function updateCurrencyDisplay() {
   const selectedCurrency = currencySelect.value;
+  const selectedRate = getSelectedRate(selectedCurrency);
+  const rateText = selectedRate ? selectedRate.toFixed(2) : '—';
+  const inverseRateText = selectedRate ? (1 / selectedRate).toFixed(4) : '—';
+  const currencyLabel = selectedCurrency.toUpperCase();
   
   if (selectedCurrency === 'idr') {
     secondCurrencyLabel.innerHTML = 'IDR <span id="second-currency-rate" class="rate-info"></span>';
-    document.getElementById('thb-rate').textContent = `(1 THB = ${RATE_IDR_PER_THB.toFixed(2)} IDR)`;
   } else if (selectedCurrency === 'php') {
     secondCurrencyLabel.innerHTML = 'PHP <span id="second-currency-rate" class="rate-info"></span>';
-    document.getElementById('thb-rate').textContent = `(1 THB = ${RATE_PHP_PER_THB.toFixed(2)} PHP)`;
   } else if (selectedCurrency === 'jpy') {
     secondCurrencyLabel.innerHTML = 'JPY <span id="second-currency-rate" class="rate-info"></span>';
-    document.getElementById('thb-rate').textContent = `(1 THB = ${RATE_JPY_PER_THB.toFixed(2)} JPY)`;
+  }
+
+  const thbRateElement = document.getElementById('thb-rate');
+  if (thbRateElement) {
+    thbRateElement.textContent = selectedRate ? `(1 THB = ${rateText} ${currencyLabel})` : '(loading rate...)';
   }
   
   // Update rate reference after DOM update
   const rateElement = document.getElementById('second-currency-rate');
   if (rateElement) {
-    if (selectedCurrency === 'idr') {
-      rateElement.textContent = `(1 IDR = ${(1 / RATE_IDR_PER_THB).toFixed(4)} THB)`;
-    } else if (selectedCurrency === 'php') {
-      rateElement.textContent = `(1 PHP = ${(1 / RATE_PHP_PER_THB).toFixed(4)} THB)`;
-    } else if (selectedCurrency === 'jpy') {
-      rateElement.textContent = `(1 JPY = ${(1 / RATE_JPY_PER_THB).toFixed(4)} THB)`;
-    }
+    rateElement.textContent = selectedRate ? `(1 ${currencyLabel} = ${inverseRateText} THB)` : '(loading rate...)';
   }
   
   // Clear the second currency input when switching
@@ -63,29 +132,18 @@ function updateCurrencyDisplay() {
 
 // Conversion functions
 function convertFromTHB(thbValue, targetCurrency) {
-  if (targetCurrency === 'idr') {
-    return thbValue * RATE_IDR_PER_THB;
-  } else if (targetCurrency === 'php') {
-    return thbValue * RATE_PHP_PER_THB;
-  } else if (targetCurrency === 'jpy') {
-    return thbValue * RATE_JPY_PER_THB;
-  }
-  return 0;
+  const rate = getSelectedRate(targetCurrency);
+  return rate ? thbValue * rate : 0;
 }
 
 function convertToTHB(secondCurrencyValue, sourceCurrency) {
-  if (sourceCurrency === 'idr') {
-    return secondCurrencyValue / RATE_IDR_PER_THB;
-  } else if (sourceCurrency === 'php') {
-    return secondCurrencyValue / RATE_PHP_PER_THB;
-  } else if (sourceCurrency === 'jpy') {
-    return secondCurrencyValue / RATE_JPY_PER_THB;
-  }
-  return 0;
+  const rate = getSelectedRate(sourceCurrency);
+  return rate ? secondCurrencyValue / rate : 0;
 }
 
 // Initialize on page load
 loadSavedCurrency();
+loadExchangeRates();
 
 // Event listener for currency selection dropdown
 currencySelect.addEventListener('change', function() {

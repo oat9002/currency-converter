@@ -19,6 +19,17 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Bump version
+        run: |
+          VERSION=$(node -e "const v = require('./version.json').version; const parts = v.split('.'); parts[2] = String(parseInt(parts[2]) + 1); console.log(parts.join('.'))")
+          echo "{\"version\": \"$VERSION\"}" > version.json
+          echo "New version: $VERSION"
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add version.json
+          git commit -m "chore: bump version to $VERSION"
+          git push
+
       - name: Install dependencies
         run: npm install
 
@@ -29,3 +40,4 @@ jobs:
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: npx firebase deploy --only hosting --token "$FIREBASE_TOKEN" --non-interactive
+

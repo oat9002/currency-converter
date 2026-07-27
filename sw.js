@@ -1,18 +1,33 @@
-const CACHE_NAME = 'currency-converter-v1';
+const CACHE_VERSION_URL = '/version.json';
+let CACHE_NAME = 'currency-converter'; // Default fallback
+
 const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/style.css',
   '/tailwind.css',
   '/script.js',
-  '/sw.js'
+  '/sw.js',
+  '/version.json'
 ];
 
+// Fetch version on install and set cache name
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(PRECACHE_URLS))
-      .then(() => self.skipWaiting())
+    fetch(CACHE_VERSION_URL)
+      .then(response => response.json())
+      .then(data => {
+        CACHE_NAME = 'currency-converter-v' + data.version;
+        return caches.open(CACHE_NAME)
+          .then(cache => cache.addAll(PRECACHE_URLS))
+          .then(() => self.skipWaiting());
+      })
+      .catch(() => {
+        // Fallback if version.json fetch fails
+        return caches.open(CACHE_NAME)
+          .then(cache => cache.addAll(PRECACHE_URLS))
+          .then(() => self.skipWaiting());
+      })
   );
 });
 
@@ -53,7 +68,8 @@ self.addEventListener('fetch', event => {
       fetch(event.request)
         .then(networkResponse => {
           if (networkResponse && networkResponse.ok) {
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, networkResponse.clone()));
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
           }
           return networkResponse;
         })
@@ -70,7 +86,8 @@ self.addEventListener('fetch', event => {
 
       return fetch(event.request).then(networkResponse => {
         if (networkResponse && networkResponse.ok && (event.request.url.startsWith(self.location.origin) || isCrossOriginAsset)) {
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, networkResponse.clone()));
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
         }
         return networkResponse;
       }).catch(() => {

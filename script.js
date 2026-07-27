@@ -453,3 +453,41 @@ if (document.readyState === 'loading') {
 } else {
   initThemeToggle();
 }
+
+// Service Worker update detection
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    console.log('New service worker activated - refreshing page');
+    window.location.reload();
+  });
+
+  setInterval(() => {
+    navigator.serviceWorker.getRegistration().then(registration => {
+      if (registration) {
+        registration.update().catch(error => {
+          console.error('Service Worker update check failed:', error);
+        });
+      }
+    });
+  }, 60000); // Check for updates every 60 seconds
+}
+
+// Fetch and display version in console
+async function loadAndDisplayVersion() {
+  try {
+    const response = await fetch('/version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (response.ok) {
+      const data = await response.json();
+      console.log('🔄 App Version:', 'v' + data.version);
+    }
+  } catch (error) {
+    console.error('Failed to fetch version:', error);
+  }
+}
+
+// Wait for DOM to be ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', loadAndDisplayVersion);
+} else {
+  loadAndDisplayVersion();
+}

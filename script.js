@@ -13,7 +13,12 @@ let lastEdited = null;
 let exchangeRates = {
   idr: null,
   php: null,
-  jpy: null
+  jpy: null,
+  myr: null,
+  cny: null,
+  krw: null,
+  sgd: null,
+  hkd: null
 };
 
 function readStorageState() {
@@ -58,17 +63,19 @@ function saveRatesToCache(ratesData) {
 }
 
 function getSelectedRate(currency) {
-  if (currency === 'idr') return exchangeRates.idr;
-  if (currency === 'php') return exchangeRates.php;
-  if (currency === 'jpy') return exchangeRates.jpy;
-  return null;
+  return exchangeRates[currency] ?? null;
 }
 
 function applyRates(ratesData) {
   exchangeRates = {
     idr: ratesData.idr ?? null,
     php: ratesData.php ?? null,
-    jpy: ratesData.jpy ?? null
+    jpy: ratesData.jpy ?? null,
+    myr: ratesData.myr ?? null,
+    cny: ratesData.cny ?? null,
+    krw: ratesData.krw ?? null,
+    sgd: ratesData.sgd ?? null,
+    hkd: ratesData.hkd ?? null
   };
   updateCurrencyDisplay();
 }
@@ -89,10 +96,15 @@ async function loadExchangeRates() {
     const fetchedRates = {
       idr: data?.thb?.idr ?? null,
       php: data?.thb?.php ?? null,
-      jpy: data?.thb?.jpy ?? null
+      jpy: data?.thb?.jpy ?? null,
+      myr: data?.thb?.myr ?? null,
+      cny: data?.thb?.cny ?? null,
+      krw: data?.thb?.krw ?? null,
+      sgd: data?.thb?.sgd ?? null,
+      hkd: data?.thb?.hkd ?? null
     };
 
-    if (fetchedRates.idr && fetchedRates.php && fetchedRates.jpy) {
+    if (fetchedRates.idr && fetchedRates.php && fetchedRates.jpy && fetchedRates.myr && fetchedRates.cny && fetchedRates.krw && fetchedRates.sgd && fetchedRates.hkd) {
       saveRatesToCache(fetchedRates);
       applyRates(fetchedRates);
     }
@@ -118,33 +130,46 @@ function saveCurrencySelection(currency) {
   writeStorageState(state);
 }
 
+function getCurrencyLabel(currency) {
+  const labels = {
+    idr: 'IDR',
+    php: 'PHP',
+    jpy: 'JPY',
+    myr: 'MYR',
+    cny: 'CNY',
+    krw: 'KRW',
+    sgd: 'SGD',
+    hkd: 'HKD'
+  };
+
+  return labels[currency] || currency.toUpperCase();
+}
+
+function getDisplayPrecision(currency) {
+  return ['idr', 'jpy', 'krw'].includes(currency) ? 0 : 2;
+}
+
 // Update the display based on selected currency
 function updateCurrencyDisplay() {
   const selectedCurrency = currencySelect.value;
   const selectedRate = getSelectedRate(selectedCurrency);
   const rateText = selectedRate ? selectedRate.toFixed(2) : '—';
   const inverseRateText = selectedRate ? (1 / selectedRate).toFixed(4) : '—';
-  const currencyLabel = selectedCurrency.toUpperCase();
-  
-  if (selectedCurrency === 'idr') {
-    secondCurrencyLabel.innerHTML = 'IDR <span id="second-currency-rate" class="rate-info"></span>';
-  } else if (selectedCurrency === 'php') {
-    secondCurrencyLabel.innerHTML = 'PHP <span id="second-currency-rate" class="rate-info"></span>';
-  } else if (selectedCurrency === 'jpy') {
-    secondCurrencyLabel.innerHTML = 'JPY <span id="second-currency-rate" class="rate-info"></span>';
-  }
+  const currencyLabel = getCurrencyLabel(selectedCurrency);
+
+  secondCurrencyLabel.innerHTML = `${currencyLabel} <span id="second-currency-rate" class="rate-info"></span>`;
 
   const thbRateElement = document.getElementById('thb-rate');
   if (thbRateElement) {
     thbRateElement.textContent = selectedRate ? `(1 THB = ${rateText} ${currencyLabel})` : '(loading rate...)';
   }
-  
+
   // Update rate reference after DOM update
   const rateElement = document.getElementById('second-currency-rate');
   if (rateElement) {
     rateElement.textContent = selectedRate ? `(1 ${currencyLabel} = ${inverseRateText} THB)` : '(loading rate...)';
   }
-  
+
   // Clear the second currency input when switching
   secondCurrency.value = '';
 }
@@ -179,11 +204,8 @@ thb.addEventListener('input', function() {
   if (val) {
     const selectedCurrency = currencySelect.value;
     const converted = convertFromTHB(val, selectedCurrency);
-    if (selectedCurrency === 'idr' || selectedCurrency === 'jpy') {
-      secondCurrency.value = converted.toFixed(0);
-    } else {
-      secondCurrency.value = converted.toFixed(2);
-    }
+    const precision = getDisplayPrecision(selectedCurrency);
+    secondCurrency.value = converted.toFixed(precision);
   } else {
     secondCurrency.value = '';
   }
@@ -320,12 +342,9 @@ captureBtn.addEventListener('click', async function() {
       // Get the selected currency
       const selectedCurrency = currencySelect.value;
       
-      // Populate the source currency field (IDR, PHP, or JPY) with the extracted number
-      if (selectedCurrency === 'idr' || selectedCurrency === 'jpy') {
-        secondCurrency.value = extractedNumber.toFixed(0);
-      } else {
-        secondCurrency.value = extractedNumber.toFixed(2);
-      }
+      // Populate the source currency field with the extracted number
+      const precision = getDisplayPrecision(selectedCurrency);
+      secondCurrency.value = extractedNumber.toFixed(precision);
       
       // Trigger conversion from source currency to THB
       const val = parseFloat(secondCurrency.value);

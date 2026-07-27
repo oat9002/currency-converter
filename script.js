@@ -156,17 +156,20 @@ function updateCurrencyDisplay() {
   const rateText = selectedRate ? selectedRate.toFixed(2) : '—';
   const inverseRateText = selectedRate ? (1 / selectedRate).toFixed(4) : '—';
   const currencyLabel = getCurrencyLabel(selectedCurrency);
+  const sharedRateClasses = 'text-xs text-nm-muted font-normal ml-2';
 
-  secondCurrencyLabel.innerHTML = `${currencyLabel} <span id="second-currency-rate" class="rate-info"></span>`;
+  secondCurrencyLabel.innerHTML = `${currencyLabel} <span id="second-currency-rate" class="${sharedRateClasses} rate-info"></span>`;
 
   const thbRateElement = document.getElementById('thb-rate');
   if (thbRateElement) {
+    thbRateElement.className = sharedRateClasses;
     thbRateElement.textContent = selectedRate ? `(1 THB = ${rateText} ${currencyLabel})` : '(loading rate...)';
   }
 
   // Update rate reference after DOM update
   const rateElement = document.getElementById('second-currency-rate');
   if (rateElement) {
+    rateElement.className = sharedRateClasses;
     rateElement.textContent = selectedRate ? `(1 ${currencyLabel} = ${inverseRateText} THB)` : '(loading rate...)';
   }
 

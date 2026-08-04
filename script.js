@@ -323,50 +323,172 @@ captureBtn.addEventListener('click', async function() {
   captureBtn.disabled = true;
   
   try {
-    // Preprocess canvas: upscale, grayscale, increase contrast, binary threshold
-    function preprocessCanvas(srcCanvas) {
-      const scale = 2;
+    // Helper: preprocess - upscale + grayscale
+    function preprocessCanvas(srcCanvas, scale = 2) {
       const w = srcCanvas.width * scale;
       const h = srcCanvas.height * scale;
       const tmp = document.createElement('canvas');
       tmp.width = w;
       tmp.height = h;
       const ctx = tmp.getContext('2d');
-      // Draw scaled image
       ctx.drawImage(srcCanvas, 0, 0, w, h);
-      const img = ctx.getImageData(0, 0, w, h);
-      const data = img.data;
-      // Simple grayscale + contrast and binary threshold
-      const contrast = 1.4; // increase to make digits stand out
-      const threshold = 150;
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        // luminance
-        let l = 0.299 * r + 0.587 * g + 0.114 * b;
-        // adjust contrast around midpoint
-        l = ((l - 128) * contrast) + 128;
-        const v = l > threshold ? 255 : 0;
-        data[i] = data[i + 1] = data[i + 2] = v;
-      }
-      ctx.putImageData(img, 0, 0);
       return tmp;
     }
 
-    const preprocessedCanvas = preprocessCanvas(cameraCanvas);
-    const imageData = preprocessedCanvas.toDataURL('image/png');
-
-    // Perform OCR using Tesseract.js with numeric whitelist and single-block PSM
-    const { data: { text } } = await Tesseract.recognize(imageData, 'eng', {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          console.log('OCR progress:', Math.round(m.progress * 100) + '%');
+    // Helper: median denoise (grayscale)
+    function medianDenoise(canvas, radius = 1) {
+      const w = canvas.width, h = canvas.height;
+      const ctx = canvas.getContext('2d');
+      const img = ctx.getImageData(0, 0, w, h);
+      const data = img.data;
+      const out = new Uint8ClampedArray(data.length);
+      // convert to grayscale array
+      const gray = new Uint8ClampedArray(w * h);
+      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+        const r = data[i], g = data[i+1], b = data[i+2];
+        gray[p] = Math.round(0.299*r + 0.587*g + 0.114*b);
+      }
+      const getIndex = (x,y) => y*w + x;
+      const window = [];
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          window.length = 0;
+          for (let oy = -radius; oy <= radius; oy++) {
+            for (let ox = -radius; ox <= radius; ox++) {
+              const nx = Math.min(w-1, Math.max(0, x+ox));
+              const ny = Math.min(h-1, Math.max(0, y+oy));
+              window.push(gray[getIndex(nx, ny)]);
+            }
+          }
+          window.sort((a,b)=>a-b);
+          const med = window[Math.floor(window.length/2)];
+          const p = getIndex(x,y);
+          const v = med;
+          out[p*4] = out[p*4+1] = out[p*4+2] = v;
+          out[p*4+3] = 255;
         }
-      },
-      tessedit_char_whitelist: '0123456789.,',
-      psm: 6
-    });
+      }
+      ctx.putImageData(new ImageData(out, w, h), 0, 0);
+      return canvas;
+    }
 
-    console.log('OCR Text:', text);
+    // Helper: adaptive mean threshold using integral image for speed
+    function adaptiveBinarize(canvas, blockSize = 25, C = 10) {
+      const w = canvas.width, h = canvas.height;
+      const ctx = canvas.getContext('2d');
+      const img = ctx.getImageData(0, 0, w, h);
+      const data = img.data;
+      const gray = new Float64Array(w * h);
+      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+        gray[p] = data[i]; // assume already grayscale
+      }
+      // build integral image
+      const integral = new Float64Array(w * h);
+      for (let y = 0; y < h; y++) {
+        let rowSum = 0;
+        for (let x = 0; x < w; x++) {
+          const idx = y*w + x;
+          rowSum += gray[idx];
+          integral[idx] = rowSum + (y>0 ? integral[idx - w] : 0);
+        }
+      }
+      const half = Math.floor(blockSize/2);
+      const out = new Uint8ClampedArray(data.length);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const x1 = Math.max(0, x - half);
+          const y1 = Math.max(0, y - half);
+          const x2 = Math.min(w-1, x + half);
+          const y2 = Math.min(h-1, y + half);
+          const area = (x2 - x1 + 1) * (y2 - y1 + 1);
+          const A = y1*w + x1;
+          const B = y1*w + x2;
+          const Cidx = y2*w + x1;
+          const D = y2*w + x2;
+          const sum = integral[D] - (x1>0 ? integral[B] : 0) - (y1>0 ? integral[Cidx] : 0) + ((x1>0 && y1>0) ? integral[A - w - x1 + 1] : 0);
+          // fallback for boundaries (safe but a bit hacky)
+          const mean = sum / area;
+          const p = y*w + x;
+          const v = gray[p] > (mean - C) ? 255 : 0;
+          out[p*4] = out[p*4+1] = out[p*4+2] = v;
+          out[p*4+3] = 255;
+        }
+      }
+      ctx.putImageData(new ImageData(out, w, h), 0, 0);
+      return canvas;
+    }
+
+    // Helper: auto-crop to non-white content
+    function autoCropToContent(canvas, pad = 0.05) {
+      const w = canvas.width, h = canvas.height;
+      const ctx = canvas.getContext('2d');
+      const img = ctx.getImageData(0, 0, w, h);
+      const data = img.data;
+      let minX = w, minY = h, maxX = 0, maxY = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = (y*w + x) * 4;
+          const v = data[idx];
+          if (v < 250) { // dark pixel
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      if (maxX < minX || maxY < minY) return canvas; // nothing detected
+      const padX = Math.round((maxX - minX) * pad);
+      const padY = Math.round((maxY - minY) * pad);
+      const sx = Math.max(0, minX - padX);
+      const sy = Math.max(0, minY - padY);
+      const sw = Math.min(w - sx, (maxX - minX) + 2*padX);
+      const sh = Math.min(h - sy, (maxY - minY) + 2*padY);
+      const out = document.createElement('canvas');
+      out.width = sw; out.height = sh;
+      out.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+      return out;
+    }
+
+    // Run multiple PSM values and pick best by numeric density + confidence
+    async function runMultiPSM(canvas) {
+      const psmCandidates = [6, 7, 11, 3];
+      let best = { score: -Infinity, text: '' };
+      for (const psm of psmCandidates) {
+        try {
+          const { data: result } = await Tesseract.recognize(canvas.toDataURL('image/png'), 'eng', {
+            logger: m => {
+              if (m.status === 'recognizing text') console.log(`PSM ${psm} progress:`, Math.round(m.progress*100)+'%');
+            },
+            tessedit_char_whitelist: '0123456789.,',
+            psm: psm
+          });
+          const txt = result.text || '';
+          const digits = (txt.match(/[0-9]/g) || []).length;
+          let avgConf = 0;
+          if (result.words && result.words.length > 0) {
+            avgConf = result.words.reduce((s,w)=>s + (w.confidence||0), 0) / result.words.length;
+          }
+          const score = digits * 2 + (avgConf / 50);
+          console.log(`PSM ${psm} -> digits=${digits}, avgConf=${avgConf.toFixed(1)}, score=${score.toFixed(2)}`);
+          if (score > best.score) {
+            best = { score, text: txt, psm };
+          }
+        } catch (err) {
+          console.warn('Tesseract run failed for psm', psm, err);
+        }
+      }
+      return best;
+    }
+
+    // Pipeline: preprocess -> denoise -> adaptive binarize -> crop -> OCR
+    const stepCanvas = preprocessCanvas(cameraCanvas, 2);
+    medianDenoise(stepCanvas, 1);
+    adaptiveBinarize(stepCanvas, 25, 8);
+    const cropped = autoCropToContent(stepCanvas);
+    const bestResult = await runMultiPSM(cropped);
+    const text = bestResult.text || '';
+    console.log('OCR Text (best):', bestResult.psm, bestResult.score, text);
     
     // Extract numbers from the OCR text
     const extractedNumber = extractNumbers(text);

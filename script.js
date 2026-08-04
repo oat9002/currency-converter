@@ -323,19 +323,49 @@ captureBtn.addEventListener('click', async function() {
   captureBtn.disabled = true;
   
   try {
-    // Convert canvas to image data for Tesseract
-    const imageData = cameraCanvas.toDataURL('image/png');
-    
-    // Perform OCR using Tesseract.js
+    // Preprocess canvas: upscale, grayscale, increase contrast, binary threshold
+    function preprocessCanvas(srcCanvas) {
+      const scale = 2;
+      const w = srcCanvas.width * scale;
+      const h = srcCanvas.height * scale;
+      const tmp = document.createElement('canvas');
+      tmp.width = w;
+      tmp.height = h;
+      const ctx = tmp.getContext('2d');
+      // Draw scaled image
+      ctx.drawImage(srcCanvas, 0, 0, w, h);
+      const img = ctx.getImageData(0, 0, w, h);
+      const data = img.data;
+      // Simple grayscale + contrast and binary threshold
+      const contrast = 1.4; // increase to make digits stand out
+      const threshold = 150;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        // luminance
+        let l = 0.299 * r + 0.587 * g + 0.114 * b;
+        // adjust contrast around midpoint
+        l = ((l - 128) * contrast) + 128;
+        const v = l > threshold ? 255 : 0;
+        data[i] = data[i + 1] = data[i + 2] = v;
+      }
+      ctx.putImageData(img, 0, 0);
+      return tmp;
+    }
+
+    const preprocessedCanvas = preprocessCanvas(cameraCanvas);
+    const imageData = preprocessedCanvas.toDataURL('image/png');
+
+    // Perform OCR using Tesseract.js with numeric whitelist and single-block PSM
     const { data: { text } } = await Tesseract.recognize(imageData, 'eng', {
       logger: m => {
         if (m.status === 'recognizing text') {
-          // You can update progress here if needed
           console.log('OCR progress:', Math.round(m.progress * 100) + '%');
         }
-      }
+      },
+      tessedit_char_whitelist: '0123456789.,',
+      psm: 6
     });
-    
+
     console.log('OCR Text:', text);
     
     // Extract numbers from the OCR text

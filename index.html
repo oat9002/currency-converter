@@ -81,6 +81,7 @@
       <div class="p-4 flex flex-col gap-4">
         <div class="relative rounded-2xl overflow-hidden border border-white/60 dark:border-white/5 shadow-nm-sunken bg-black">
           <video id="camera-video" autoplay playsinline class="w-full max-h-[50vh] object-contain bg-black"></video>
+          <div id="camera-guide" class="pointer-events-none absolute inset-x-[12%] top-[18%] h-[38%] border-2 border-blue-400/80 rounded-2xl" style="box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);"></div>
           <canvas id="camera-canvas" style="display: none;"></canvas>
         </div>
         <div id="ocr-status" class="hidden flex items-center justify-center gap-3 p-3 rounded-xl bg-nm-bg shadow-nm-sunken text-nm-text text-sm font-semibold" style="display: none;">

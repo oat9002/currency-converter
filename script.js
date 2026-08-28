@@ -283,225 +283,199 @@ cameraModal.addEventListener('click', function(e) {
   }
 });
 
-// Extract numbers from text
+function normalizeNumericText(rawText) {
+  const normalized = (rawText || '')
+    .replace(/[๐-๙]/g, ch => '๐๑๒๓๔๕๖๗๘๙'.indexOf(ch) )
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[$€£¥]/g, '')
+    .replace(/O/g, '0')
+    .replace(/I/g, '1')
+    .replace(/l/g, '1')
+    .replace(/S/g, '5')
+    .replace(/B/g, '8');
+
+  return normalized;
+}
+
+function parseMoneyCandidate(rawPattern) {
+  if (!rawPattern) return null;
+
+  let pattern = rawPattern.trim();
+  if (!pattern) return null;
+
+  pattern = pattern.replace(/\s+/g, '');
+  pattern = pattern.replace(/[^\d.,]/g, '');
+  if (!pattern) return null;
+
+  if (pattern.includes(',') && pattern.includes('.')) {
+    const lastComma = pattern.lastIndexOf(',');
+    const lastDot = pattern.lastIndexOf('.');
+    const decimalSep = lastComma > lastDot ? ',' : '.';
+    const thousandSep = decimalSep === ',' ? '.' : ',';
+    pattern = pattern.replace(new RegExp(`\\${thousandSep}`, 'g'), '');
+    pattern = pattern.replace(decimalSep, '.');
+  } else if (pattern.includes(',')) {
+    const commaParts = pattern.split(',');
+    if (commaParts.length > 1 && commaParts[commaParts.length - 1].length <= 2) {
+      pattern = pattern.replace(/,/g, '.');
+    } else {
+      pattern = pattern.replace(/,/g, '');
+    }
+  } else if (pattern.includes('.')) {
+    const dotParts = pattern.split('.');
+    if (dotParts.length > 1 && dotParts[dotParts.length - 1].length <= 2) {
+      // keep decimal as is
+    } else {
+      pattern = pattern.replace(/\./g, '');
+    }
+  }
+
+  const value = Number.parseFloat(pattern);
+  if (!Number.isFinite(value)) return null;
+  if (value <= 0 || value > 10000000) return null;
+
+  return value;
+}
+
 function extractNumbers(text) {
-  // Remove all non-numeric characters except dots, commas, and spaces
-  // This handles formats like "1,234.56" or "1234.56" or "1 234.56"
-  const cleaned = text.replace(/[^\d.,\s]/g, '');
-  // Find all number patterns (including decimals and commas)
-  const numberPatterns = cleaned.match(/[\d.,]+/g);
-  if (!numberPatterns || numberPatterns.length === 0) {
+  if (!text) return null;
+
+  const normalized = normalizeNumericText(text);
+  const moneyMatches = [...normalized.matchAll(/(?:\d{1,3}(?:[\s,\.]\d{3})+|\d+)(?:[.,]\d{1,2})?/g)];
+  const candidateValues = [];
+
+  moneyMatches.forEach(match => {
+    const parsed = parseMoneyCandidate(match[0]);
+    if (parsed !== null) candidateValues.push(parsed);
+  });
+
+  if (candidateValues.length === 0) {
     return null;
   }
-  
-  // Get the largest number (likely the main amount)
-  let largestNumber = null;
-  let largestValue = 0;
-  
-  numberPatterns.forEach(pattern => {
-    // Replace comma with nothing (handle thousand separators)
-    const numStr = pattern.replace(/,/g, '');
-    const num = parseFloat(numStr);
-    if (!isNaN(num) && num > largestValue) {
-      largestValue = num;
-      largestNumber = num;
+
+  // Prefer values that are likely a total/amount, not dates or IDs.
+  const sorted = candidateValues
+    .filter(v => v >= 0.5 && v <= 9999999 && !(v >= 1900 && v <= 2100))
+    .sort((a, b) => b - a);
+
+  if (sorted.length === 0) return null;
+  return sorted[0];
+}
+
+function getCaptureCanvas() {
+  const targetWidth = cameraVideo.videoWidth || 1280;
+  const targetHeight = cameraVideo.videoHeight || 720;
+  const cropWidth = Math.min(targetWidth, Math.round(targetWidth * 0.82));
+  const cropHeight = Math.min(targetHeight, Math.round(targetHeight * 0.42));
+  const cropX = (targetWidth - cropWidth) / 2;
+  const cropY = (targetHeight - cropHeight) / 2;
+
+  const captureCanvas = document.createElement('canvas');
+  captureCanvas.width = cropWidth;
+  captureCanvas.height = cropHeight;
+  const ctx = captureCanvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(cameraVideo, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+  return captureCanvas;
+}
+
+function enhanceCanvasForOCR(sourceCanvas) {
+  const scale = 2;
+  const tmp = document.createElement('canvas');
+  tmp.width = sourceCanvas.width * scale;
+  tmp.height = sourceCanvas.height * scale;
+  const ctx = tmp.getContext('2d');
+  ctx.drawImage(sourceCanvas, 0, 0, tmp.width, tmp.height);
+
+  const img = ctx.getImageData(0, 0, tmp.width, tmp.height);
+  const data = img.data;
+  const brightnessThreshold = 210;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+    gray = Math.max(0, Math.min(255, (gray - 128) * 1.6 + 128));
+    const v = gray > brightnessThreshold ? 255 : Math.max(0, gray - 45);
+    data[i] = v;
+    data[i + 1] = v;
+    data[i + 2] = v;
+    data[i + 3] = 255;
+  }
+
+  ctx.putImageData(img, 0, 0);
+  return tmp;
+}
+
+async function runOCROnCanvas(canvas) {
+  const candidates = [6, 7, 11, 13];
+  let best = { score: -Infinity, text: '' };
+
+  for (const psm of candidates) {
+    try {
+      const { data } = await Tesseract.recognize(canvas.toDataURL('image/png'), 'eng+tha', {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            console.log(`OCR psm ${psm}:`, Math.round(m.progress * 100) + '%');
+          }
+        },
+        tessedit_char_whitelist: '0123456789.,:()฿/ -',
+        psm
+      });
+
+      const cleanedText = normalizeNumericText(data.text || '');
+      const digits = (cleanedText.match(/\d/g) || []).length;
+      const avgConfidence = data.words && data.words.length
+        ? data.words.reduce((sum, word) => sum + (Number(word.confidence) || 0), 0) / data.words.length
+        : 0;
+      const score = digits * 4 + avgConfidence * 0.6;
+
+      if (score > best.score) {
+        best = { score, text: cleanedText, psm };
+      }
+    } catch (error) {
+      console.warn('OCR candidate failed for psm', psm, error);
     }
-  });
-  
-  return largestNumber;
+  }
+
+  return best;
 }
 
 // Capture photo and perform OCR
 captureBtn.addEventListener('click', async function() {
+  if (!cameraVideo.videoWidth || !cameraVideo.videoHeight) {
+    ocrStatus.innerHTML = '<span style="color: #ff3b30;">Camera not ready. Try again.</span>';
+    setTimeout(() => {
+      ocrStatus.style.display = 'none';
+      captureBtn.disabled = false;
+    }, 2000);
+    return;
+  }
+
+  const captureCanvas = getCaptureCanvas();
+  cameraCanvas.width = captureCanvas.width;
+  cameraCanvas.height = captureCanvas.height;
   const context = cameraCanvas.getContext('2d');
-  cameraCanvas.width = cameraVideo.videoWidth;
-  cameraCanvas.height = cameraVideo.videoHeight;
-  context.drawImage(cameraVideo, 0, 0);
-  
+  context.drawImage(captureCanvas, 0, 0);
+
   // Show OCR status
   ocrStatus.style.display = 'flex';
   captureBtn.disabled = true;
-  
+
   try {
-    // Helper: preprocess - upscale + grayscale
-    function preprocessCanvas(srcCanvas, scale = 2) {
-      const w = srcCanvas.width * scale;
-      const h = srcCanvas.height * scale;
-      const tmp = document.createElement('canvas');
-      tmp.width = w;
-      tmp.height = h;
-      const ctx = tmp.getContext('2d');
-      ctx.drawImage(srcCanvas, 0, 0, w, h);
-      return tmp;
-    }
-
-    // Helper: median denoise (grayscale)
-    function medianDenoise(canvas, radius = 1) {
-      const w = canvas.width, h = canvas.height;
-      const ctx = canvas.getContext('2d');
-      const img = ctx.getImageData(0, 0, w, h);
-      const data = img.data;
-      const out = new Uint8ClampedArray(data.length);
-      // convert to grayscale array
-      const gray = new Uint8ClampedArray(w * h);
-      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-        const r = data[i], g = data[i+1], b = data[i+2];
-        gray[p] = Math.round(0.299*r + 0.587*g + 0.114*b);
-      }
-      const getIndex = (x,y) => y*w + x;
-      const window = [];
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          window.length = 0;
-          for (let oy = -radius; oy <= radius; oy++) {
-            for (let ox = -radius; ox <= radius; ox++) {
-              const nx = Math.min(w-1, Math.max(0, x+ox));
-              const ny = Math.min(h-1, Math.max(0, y+oy));
-              window.push(gray[getIndex(nx, ny)]);
-            }
-          }
-          window.sort((a,b)=>a-b);
-          const med = window[Math.floor(window.length/2)];
-          const p = getIndex(x,y);
-          const v = med;
-          out[p*4] = out[p*4+1] = out[p*4+2] = v;
-          out[p*4+3] = 255;
-        }
-      }
-      ctx.putImageData(new ImageData(out, w, h), 0, 0);
-      return canvas;
-    }
-
-    // Helper: adaptive mean threshold using integral image for speed
-    function adaptiveBinarize(canvas, blockSize = 25, C = 10) {
-      const w = canvas.width, h = canvas.height;
-      const ctx = canvas.getContext('2d');
-      const img = ctx.getImageData(0, 0, w, h);
-      const data = img.data;
-      const gray = new Float64Array(w * h);
-      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-        gray[p] = data[i]; // assume already grayscale
-      }
-      // build integral image
-      const integral = new Float64Array(w * h);
-      for (let y = 0; y < h; y++) {
-        let rowSum = 0;
-        for (let x = 0; x < w; x++) {
-          const idx = y*w + x;
-          rowSum += gray[idx];
-          integral[idx] = rowSum + (y>0 ? integral[idx - w] : 0);
-        }
-      }
-      const half = Math.floor(blockSize/2);
-      const out = new Uint8ClampedArray(data.length);
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const x1 = Math.max(0, x - half);
-          const y1 = Math.max(0, y - half);
-          const x2 = Math.min(w-1, x + half);
-          const y2 = Math.min(h-1, y + half);
-          const area = (x2 - x1 + 1) * (y2 - y1 + 1);
-          const A = y1*w + x1;
-          const B = y1*w + x2;
-          const Cidx = y2*w + x1;
-          const D = y2*w + x2;
-          const sum = integral[D] - (x1>0 ? integral[B] : 0) - (y1>0 ? integral[Cidx] : 0) + ((x1>0 && y1>0) ? integral[A - w - x1 + 1] : 0);
-          // fallback for boundaries (safe but a bit hacky)
-          const mean = sum / area;
-          const p = y*w + x;
-          const v = gray[p] > (mean - C) ? 255 : 0;
-          out[p*4] = out[p*4+1] = out[p*4+2] = v;
-          out[p*4+3] = 255;
-        }
-      }
-      ctx.putImageData(new ImageData(out, w, h), 0, 0);
-      return canvas;
-    }
-
-    // Helper: auto-crop to non-white content
-    function autoCropToContent(canvas, pad = 0.05) {
-      const w = canvas.width, h = canvas.height;
-      const ctx = canvas.getContext('2d');
-      const img = ctx.getImageData(0, 0, w, h);
-      const data = img.data;
-      let minX = w, minY = h, maxX = 0, maxY = 0;
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const idx = (y*w + x) * 4;
-          const v = data[idx];
-          if (v < 250) { // dark pixel
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
-          }
-        }
-      }
-      if (maxX < minX || maxY < minY) return canvas; // nothing detected
-      const padX = Math.round((maxX - minX) * pad);
-      const padY = Math.round((maxY - minY) * pad);
-      const sx = Math.max(0, minX - padX);
-      const sy = Math.max(0, minY - padY);
-      const sw = Math.min(w - sx, (maxX - minX) + 2*padX);
-      const sh = Math.min(h - sy, (maxY - minY) + 2*padY);
-      const out = document.createElement('canvas');
-      out.width = sw; out.height = sh;
-      out.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
-      return out;
-    }
-
-    // Run multiple PSM values and pick best by numeric density + confidence
-    async function runMultiPSM(canvas) {
-      const psmCandidates = [6, 7, 11, 3];
-      let best = { score: -Infinity, text: '' };
-      for (const psm of psmCandidates) {
-        try {
-          const { data: result } = await Tesseract.recognize(canvas.toDataURL('image/png'), 'eng', {
-            logger: m => {
-              if (m.status === 'recognizing text') console.log(`PSM ${psm} progress:`, Math.round(m.progress*100)+'%');
-            },
-            tessedit_char_whitelist: '0123456789.,',
-            psm: psm
-          });
-          const txt = result.text || '';
-          const digits = (txt.match(/[0-9]/g) || []).length;
-          let avgConf = 0;
-          if (result.words && result.words.length > 0) {
-            avgConf = result.words.reduce((s,w)=>s + (w.confidence||0), 0) / result.words.length;
-          }
-          const score = digits * 2 + (avgConf / 50);
-          console.log(`PSM ${psm} -> digits=${digits}, avgConf=${avgConf.toFixed(1)}, score=${score.toFixed(2)}`);
-          if (score > best.score) {
-            best = { score, text: txt, psm };
-          }
-        } catch (err) {
-          console.warn('Tesseract run failed for psm', psm, err);
-        }
-      }
-      return best;
-    }
-
-    // Pipeline: preprocess -> denoise -> adaptive binarize -> crop -> OCR
-    const stepCanvas = preprocessCanvas(cameraCanvas, 2);
-    medianDenoise(stepCanvas, 1);
-    adaptiveBinarize(stepCanvas, 25, 8);
-    const cropped = autoCropToContent(stepCanvas);
-    const bestResult = await runMultiPSM(cropped);
+    const enhancedCanvas = enhanceCanvasForOCR(captureCanvas);
+    const bestResult = await runOCROnCanvas(enhancedCanvas);
     const text = bestResult.text || '';
-    console.log('OCR Text (best):', bestResult.psm, bestResult.score, text);
-    
-    // Extract numbers from the OCR text
+    console.log('OCR Text:', text);
+
     const extractedNumber = extractNumbers(text);
-    
+
     if (extractedNumber !== null && !isNaN(extractedNumber)) {
-      // Get the selected currency
       const selectedCurrency = currencySelect.value;
-      
-      // Populate the source currency field with the extracted number
       const precision = getDisplayPrecision(selectedCurrency);
       secondCurrency.value = extractedNumber.toFixed(precision);
-      
-      // Trigger conversion from source currency to THB
+
       const val = parseFloat(secondCurrency.value);
       if (val) {
         lastEdited = 'second';
@@ -509,15 +483,14 @@ captureBtn.addEventListener('click', async function() {
         thb.value = converted.toFixed(2);
         lastEdited = null;
       }
-      
-      // Show success message briefly
+
       const currencyName = selectedCurrency.toUpperCase();
       ocrStatus.innerHTML = '<span style="color: #4caf50;">✓ Number detected: ' + extractedNumber.toFixed(2) + ' ' + currencyName + '</span>';
       setTimeout(() => {
         closeCamera();
       }, 1500);
     } else {
-      ocrStatus.innerHTML = '<span style="color: #ff3b30;">No numbers found. Try again.</span>';
+      ocrStatus.innerHTML = '<span style="color: #ff3b30;">No usable amount found. Try again.</span>';
       setTimeout(() => {
         ocrStatus.style.display = 'none';
         captureBtn.disabled = false;

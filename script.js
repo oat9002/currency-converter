@@ -21,6 +21,19 @@ let exchangeRates = {
   hkd: null
 };
 
+// Reusable offscreen canvas for preprocessing to reduce allocations
+let ocrOffscreen = document.createElement('canvas');
+function getOffscreenCanvas(w, h) {
+  if (ocrOffscreen.width !== w || ocrOffscreen.height !== h) {
+    ocrOffscreen.width = w;
+    ocrOffscreen.height = h;
+  }
+  return ocrOffscreen;
+}
+
+// Money regex (hoisted to avoid recreating it on every capture)
+const MONEY_RE = /(?:\d{1,3}(?:[\s,\.]\d{3})+|\d+)(?:[.,]\d{1,2})?/g;
+
 function readStorageState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -381,16 +394,16 @@ function getCaptureCanvas() {
 
 function enhanceCanvasForOCR(sourceCanvas) {
   const scale = 2;
-  const tmp = document.createElement('canvas');
-  tmp.width = sourceCanvas.width * scale;
-  tmp.height = sourceCanvas.height * scale;
+  const tmp = getOffscreenCanvas(sourceCanvas.width * scale, sourceCanvas.height * scale);
   const ctx = tmp.getContext('2d');
+  ctx.clearRect(0, 0, tmp.width, tmp.height);
   ctx.drawImage(sourceCanvas, 0, 0, tmp.width, tmp.height);
 
   const img = ctx.getImageData(0, 0, tmp.width, tmp.height);
   const data = img.data;
   const brightnessThreshold = 210;
 
+  // Convert to grayscale with contrast boost in-place
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
     const g = data[i + 1];
@@ -409,12 +422,14 @@ function enhanceCanvasForOCR(sourceCanvas) {
 }
 
 async function runOCROnCanvas(canvas) {
-  const candidates = [6, 7, 11, 13];
-  let best = { score: -Infinity, text: '' };
+  // Try a small prioritized set of PSMs and stop early when confident
+  const candidates = [6, 11];
+  let best = { score: -Infinity, text: '', psm: null };
 
   for (const psm of candidates) {
     try {
-      const { data } = await Tesseract.recognize(canvas.toDataURL('image/png'), 'eng+tha', {
+      // Pass canvas directly to avoid expensive toDataURL serialization
+      const { data } = await Tesseract.recognize(canvas, 'eng+tha', {
         logger: m => {
           if (m.status === 'recognizing text') {
             console.log(`OCR psm ${psm}:`, Math.round(m.progress * 100) + '%');
@@ -433,6 +448,12 @@ async function runOCROnCanvas(canvas) {
 
       if (score > best.score) {
         best = { score, text: cleanedText, psm };
+      }
+
+      // Early exit if result already strong enough
+      if (digits >= 3 && avgConfidence >= 80) {
+        console.log(`Early exit on psm ${psm} with digits=${digits} avgConf=${avgConfidence.toFixed(1)}`);
+        break;
       }
     } catch (error) {
       console.warn('OCR candidate failed for psm', psm, error);
@@ -511,7 +532,6 @@ function initThemeToggle() {
   const themeToggle = document.getElementById('theme-toggle');
   const sunIcon = document.getElementById('sun-icon');
   const moonIcon = document.getElementById('moon-icon');
-  const body = document.body;
 
   if (!themeToggle || !sunIcon || !moonIcon) {
     console.error('Theme toggle elements not found');

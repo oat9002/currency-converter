@@ -423,12 +423,24 @@ function enhanceCanvasForOCR(sourceCanvas) {
 
 // OCR worker integration: run OCR in dedicated Web Worker to avoid blocking main thread
 let ocrWorker = null;
+let ocrWorkerReady = null;
 const _pendingOCR = new Map();
 function initOCRWorker() {
   if (ocrWorker) return;
   ocrWorker = new Worker('ocr-worker.js');
+  ocrWorkerReady = new Promise((resolve, reject) => {
+    ocrWorker._resolveReady = resolve;
+    ocrWorker._rejectReady = reject;
+  });
+
   ocrWorker.onmessage = (e) => {
-    const { id, result, error } = e.data || {};
+    const data = e.data || {};
+    if (data.type === 'ready') {
+      ocrWorker._resolveReady();
+      return;
+    }
+
+    const { id, result, error } = data;
     const entry = _pendingOCR.get(id);
     if (!entry) return;
     _pendingOCR.delete(id);
@@ -440,11 +452,18 @@ function initOCRWorker() {
   };
   ocrWorker.onerror = (err) => {
     console.error('OCR worker error', err);
+    if (ocrWorker && ocrWorker._rejectReady) ocrWorker._rejectReady(err);
   };
+
+  // ask worker to initialize in background
+  try { ocrWorker.postMessage({ type: 'init' }); } catch (e) { /* ignore */ }
 }
 
 async function runOCROnCanvas(canvas, timeoutMs = 20000) {
   initOCRWorker();
+  // wait for worker to be ready (but don't fail immediately)
+  try { await Promise.race([ocrWorkerReady, new Promise(res => setTimeout(res, 2000))]); } catch (e) { /* ignore */ }
+
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   return new Promise(async (resolve, reject) => {
     const timer = setTimeout(() => {
@@ -460,7 +479,7 @@ async function runOCROnCanvas(canvas, timeoutMs = 20000) {
     try {
       // create transferable ImageBitmap to send to worker
       const bitmap = await createImageBitmap(canvas);
-      ocrWorker.postMessage({ id, bitmap }, [bitmap]);
+      ocrWorker.postMessage({ type: 'recognize', id, bitmap }, [bitmap]);
     } catch (err) {
       _pendingOCR.delete(id);
       clearTimeout(timer);

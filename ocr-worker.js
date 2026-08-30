@@ -99,6 +99,41 @@ function extractCandidateScore(word, keywordWords) {
   return score;
 }
 
+function parseMoneyCandidateLocal(raw) {
+  if (!raw) return null;
+  let pattern = String(raw).trim();
+  if (!pattern) return null;
+  pattern = pattern.replace(/\s+/g, '');
+  pattern = pattern.replace(/[^\d.,]/g, '');
+  if (!pattern) return null;
+
+  if (pattern.includes(',') && pattern.includes('.')) {
+    const lastComma = pattern.lastIndexOf(',');
+    const lastDot = pattern.lastIndexOf('.');
+    const decimalSep = lastComma > lastDot ? ',' : '.';
+    const thousandSep = decimalSep === ',' ? '.' : ',';
+    pattern = pattern.replace(new RegExp(`\\${thousandSep}`, 'g'), '');
+    pattern = pattern.replace(decimalSep, '.');
+  } else if (pattern.includes(',')) {
+    const parts = pattern.split(',');
+    if (parts.length > 1 && parts[parts.length - 1].length <= 2) {
+      pattern = pattern.replace(/,/g, '.');
+    } else {
+      pattern = pattern.replace(/,/g, '');
+    }
+  } else if (pattern.includes('.')) {
+    const parts = pattern.split('.');
+    if (parts.length > 1 && parts[parts.length - 1].length > 2) {
+      pattern = pattern.replace(/\./g, '');
+    }
+  }
+
+  const value = Number.parseFloat(pattern);
+  if (!Number.isFinite(value)) return null;
+  if (value <= 0 || value > 10000000) return null;
+  return value;
+}
+
 function scoreResult(data) {
   const txt = (data && data.text) ? String(data.text) : '';
   const cleaned = (txt || '').replace(/[\u200B-\u200D\uFEFF]/g, '');
@@ -107,21 +142,23 @@ function scoreResult(data) {
     ? data.words.reduce((s, w) => s + (Number(w.confidence) || 0), 0) / data.words.length
     : 0;
 
-  let bestCandidate = null;
-  let bestCandidateScore = -Infinity;
   const keywordWords = (data.words || [])
     .filter(w => {
       const norm = normalizeKeywordText(w.text);
       return KEYWORDS.some(kw => norm.includes(normalizeKeywordText(kw)) || normalizeKeywordText(kw).includes(norm));
     });
 
-  for (const word of data.words || []) {
-    const norm = normalizeKeywordText(word.text);
-    if (!norm || !/\d/.test(norm)) continue;
-    const candidateText = norm.replace(/[^\d.,]/g, '');
-    if (!candidateText) continue;
-    let score = Number(word.confidence || 0) * 1.2;
+  const candidates = [];
 
+  for (const word of data.words || []) {
+    const rawText = String(word.text || '');
+    const norm = normalizeKeywordText(rawText);
+    if (!norm || !/\d/.test(norm)) continue;
+    const candidateText = rawText.replace(/[^\d.,]/g, '');
+    const value = parseMoneyCandidateLocal(candidateText);
+    if (value === null) continue;
+
+    let score = Number(word.confidence || 0) * 1.2;
     if (word.bbox) {
       const { x0, y0, x1, y1 } = word.bbox;
       const width = Math.max(1, x1 - x0);
@@ -145,14 +182,15 @@ function scoreResult(data) {
       }
     }
 
-    // reward likely money-like numbers
     if (candidateText.includes(',') || candidateText.includes('.')) score += 15;
     if (candidateText.length >= 3 && candidateText.length <= 8) score += 10;
-    if (score > bestCandidateScore) {
-      bestCandidateScore = score;
-      bestCandidate = candidateText;
-    }
+
+    candidates.push({ text: candidateText, value, bbox: word.bbox || null, confidence: Number(word.confidence||0), score });
   }
+
+  candidates.sort((a,b)=>b.score - a.score);
+  const bestCandidate = candidates.length ? candidates[0].text : null;
+  const bestCandidateScore = candidates.length ? candidates[0].score : -Infinity;
 
   const score = digits * 4 + avgConf * 0.6 + (bestCandidate ? bestCandidateScore * 0.25 : 0);
   return {
@@ -160,7 +198,8 @@ function scoreResult(data) {
     cleaned,
     digits,
     avgConf,
-    bestCandidate
+    bestCandidate,
+    candidates
   };
 }
 

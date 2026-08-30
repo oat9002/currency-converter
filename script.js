@@ -512,35 +512,38 @@ captureBtn.addEventListener('click', async function() {
   try {
     const enhancedCanvas = enhanceCanvasForOCR(captureCanvas);
     const bestResult = await runOCROnCanvas(enhancedCanvas);
-    const text = bestResult.text || '';
-    console.log('OCR Text:', text);
+    console.log('OCR result:', bestResult);
 
-    const extractedNumber = extractNumbers(text);
+    // bestResult may include a candidates array (from worker)
+    const candidates = (bestResult && bestResult.candidates) || bestResult.candidates || [];
+    const autoAcceptScore = 120; // tunable
 
-    if (extractedNumber !== null && !isNaN(extractedNumber)) {
-      const selectedCurrency = currencySelect.value;
-      const precision = getDisplayPrecision(selectedCurrency);
-      secondCurrency.value = extractedNumber.toFixed(precision);
-
-      const val = parseFloat(secondCurrency.value);
-      if (val) {
-        lastEdited = 'second';
-        const converted = convertToTHB(val, selectedCurrency);
-        thb.value = converted.toFixed(2);
-        lastEdited = null;
+    if (candidates && candidates.length > 0) {
+      // If top candidate has a strong score, auto-accept
+      const top = candidates[0];
+      if (top.score >= autoAcceptScore) {
+        applyExtractedValue(top.value);
+        ocrStatus.innerHTML = '<span style="color: #4caf50;">✓ Number detected: ' + formatNumber(top.value) + '</span>';
+        setTimeout(() => closeCamera(), 1200);
+      } else {
+        // Show UI choices to user
+        showCandidateOptions(candidates);
       }
-
-      const currencyName = selectedCurrency.toUpperCase();
-      ocrStatus.innerHTML = '<span style="color: #4caf50;">✓ Number detected: ' + extractedNumber.toFixed(2) + ' ' + currencyName + '</span>';
-      setTimeout(() => {
-        closeCamera();
-      }, 1500);
     } else {
-      ocrStatus.innerHTML = '<span style="color: #ff3b30;">No usable amount found. Try again.</span>';
-      setTimeout(() => {
-        ocrStatus.style.display = 'none';
-        captureBtn.disabled = false;
-      }, 2000);
+      // Fallback to text-based extraction
+      const text = bestResult.text || '';
+      const extractedNumber = extractNumbers(text);
+      if (extractedNumber !== null && !isNaN(extractedNumber)) {
+        applyExtractedValue(extractedNumber);
+        ocrStatus.innerHTML = '<span style="color: #4caf50;">✓ Number detected: ' + extractedNumber.toFixed(2) + '</span>';
+        setTimeout(() => closeCamera(), 1200);
+      } else {
+        ocrStatus.innerHTML = '<span style="color: #ff3b30;">No usable amount found. Try again.</span>';
+        setTimeout(() => {
+          ocrStatus.style.display = 'none';
+          captureBtn.disabled = false;
+        }, 2000);
+      }
     }
   } catch (error) {
     console.error('OCR Error:', error);
@@ -551,6 +554,56 @@ captureBtn.addEventListener('click', async function() {
     }, 2000);
   }
 });
+
+function formatNumber(n) {
+  return Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function applyExtractedValue(val) {
+  const selectedCurrency = currencySelect.value;
+  const precision = getDisplayPrecision(selectedCurrency);
+  secondCurrency.value = Number(val).toFixed(precision);
+  const numeric = parseFloat(secondCurrency.value);
+  if (numeric) {
+    lastEdited = 'second';
+    const converted = convertToTHB(numeric, selectedCurrency);
+    thb.value = converted.toFixed(2);
+    lastEdited = null;
+  }
+}
+
+// Render candidate buttons for user to choose
+function showCandidateOptions(candidates) {
+  const container = document.getElementById('ocr-candidates');
+  container.innerHTML = '';
+  container.style.display = 'flex';
+  ocrStatus.style.display = 'none';
+
+  candidates.slice(0, 3).forEach(c => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'px-4 py-2 rounded-xl bg-nm-bg text-nm-text border border-white/40 hover:bg-black/5';
+    btn.textContent = `${formatNumber(c.value)}  — confidence ${Math.round(c.score)}`;
+    btn.addEventListener('click', () => {
+      container.style.display = 'none';
+      applyExtractedValue(c.value);
+      ocrStatus.innerHTML = '<span style="color: #4caf50;">✓ Selected: ' + formatNumber(c.value) + '</span>';
+      setTimeout(() => closeCamera(), 900);
+    });
+    container.appendChild(btn);
+  });
+
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.className = 'px-4 py-2 rounded-xl bg-nm-bg text-red-600 border border-white/40 hover:bg-black/5';
+  retry.textContent = 'None of these — Retry';
+  retry.addEventListener('click', () => {
+    container.style.display = 'none';
+    ocrStatus.style.display = 'none';
+    captureBtn.disabled = false;
+  });
+  container.appendChild(retry);
+}
 
 // Theme toggle functionality
 function initThemeToggle() {

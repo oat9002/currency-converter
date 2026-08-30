@@ -421,46 +421,52 @@ function enhanceCanvasForOCR(sourceCanvas) {
   return tmp;
 }
 
-async function runOCROnCanvas(canvas) {
-  // Try a small prioritized set of PSMs and stop early when confident
-  const candidates = [6, 11];
-  let best = { score: -Infinity, text: '', psm: null };
-
-  for (const psm of candidates) {
-    try {
-      // Pass canvas directly to avoid expensive toDataURL serialization
-      const { data } = await Tesseract.recognize(canvas, 'eng+tha', {
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            console.log(`OCR psm ${psm}:`, Math.round(m.progress * 100) + '%');
-          }
-        },
-        tessedit_char_whitelist: '0123456789.,:()฿/ -',
-        psm
-      });
-
-      const cleanedText = normalizeNumericText(data.text || '');
-      const digits = (cleanedText.match(/\d/g) || []).length;
-      const avgConfidence = data.words && data.words.length
-        ? data.words.reduce((sum, word) => sum + (Number(word.confidence) || 0), 0) / data.words.length
-        : 0;
-      const score = digits * 4 + avgConfidence * 0.6;
-
-      if (score > best.score) {
-        best = { score, text: cleanedText, psm };
-      }
-
-      // Early exit if result already strong enough
-      if (digits >= 3 && avgConfidence >= 80) {
-        console.log(`Early exit on psm ${psm} with digits=${digits} avgConf=${avgConfidence.toFixed(1)}`);
-        break;
-      }
-    } catch (error) {
-      console.warn('OCR candidate failed for psm', psm, error);
+// OCR worker integration: run OCR in dedicated Web Worker to avoid blocking main thread
+let ocrWorker = null;
+const _pendingOCR = new Map();
+function initOCRWorker() {
+  if (ocrWorker) return;
+  ocrWorker = new Worker('ocr-worker.js');
+  ocrWorker.onmessage = (e) => {
+    const { id, result, error } = e.data || {};
+    const entry = _pendingOCR.get(id);
+    if (!entry) return;
+    _pendingOCR.delete(id);
+    if (error) {
+      entry.reject(new Error(error));
+    } else {
+      entry.resolve(result);
     }
-  }
+  };
+  ocrWorker.onerror = (err) => {
+    console.error('OCR worker error', err);
+  };
+}
 
-  return best;
+async function runOCROnCanvas(canvas, timeoutMs = 20000) {
+  initOCRWorker();
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  return new Promise(async (resolve, reject) => {
+    const timer = setTimeout(() => {
+      _pendingOCR.delete(id);
+      reject(new Error('OCR timeout'));
+    }, timeoutMs);
+
+    _pendingOCR.set(id, {
+      resolve: (res) => { clearTimeout(timer); resolve(res); },
+      reject: (err) => { clearTimeout(timer); reject(err); }
+    });
+
+    try {
+      // create transferable ImageBitmap to send to worker
+      const bitmap = await createImageBitmap(canvas);
+      ocrWorker.postMessage({ id, bitmap }, [bitmap]);
+    } catch (err) {
+      _pendingOCR.delete(id);
+      clearTimeout(timer);
+      reject(err);
+    }
+  });
 }
 
 // Capture photo and perform OCR

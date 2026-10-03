@@ -2,6 +2,35 @@
 const API_URL = 'https://latest.currency-api.pages.dev/v1/currencies/thb.json';
 const STORAGE_KEY = 'currencyConverter_state';
 const RATES_TTL_MS = 24 * 60 * 60 * 1000;
+const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+let tesseractPromise = null;
+
+async function loadTesseractIfNeeded() {
+  if (window.Tesseract) {
+    return window.Tesseract;
+  }
+
+  if (!tesseractPromise) {
+    tesseractPromise = new Promise((resolve, reject) => {
+      const existingScript = document.querySelector('script[data-tesseract-script]');
+      if (existingScript) {
+        existingScript.addEventListener('load', () => resolve(window.Tesseract), { once: true });
+        existingScript.addEventListener('error', () => reject(new Error('Unable to load OCR library.')), { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = TESSERACT_URL;
+      script.async = true;
+      script.dataset.tesseractScript = 'true';
+      script.onload = () => resolve(window.Tesseract);
+      script.onerror = () => reject(new Error('Unable to load OCR library.'));
+      document.head.appendChild(script);
+    });
+  }
+
+  return tesseractPromise;
+}
 
 // Get elements
 const thb = document.getElementById('thb');
@@ -490,6 +519,18 @@ async function runOCROnCanvas(canvas, timeoutMs = 20000) {
 
 // Capture photo and perform OCR
 captureBtn.addEventListener('click', async function() {
+  try {
+    await loadTesseractIfNeeded();
+  } catch (error) {
+    console.error('OCR library failed to load:', error);
+    ocrStatus.innerHTML = '<span style="color: #ff3b30;">OCR library failed to load. Please try again.</span>';
+    setTimeout(() => {
+      ocrStatus.style.display = 'none';
+      captureBtn.disabled = false;
+    }, 2000);
+    return;
+  }
+
   if (!cameraVideo.videoWidth || !cameraVideo.videoHeight) {
     ocrStatus.innerHTML = '<span style="color: #ff3b30;">Camera not ready. Try again.</span>';
     setTimeout(() => {

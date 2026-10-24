@@ -8,6 +8,7 @@ function loadWorker(overrides = {}) {
   const context = vm.createContext({
     importScripts() {}, self: {}, postMessage: message => messages.push(message), ...overrides
   });
+  vm.runInContext(fs.readFileSync('app-config.js', 'utf8'), context);
   vm.runInContext(fs.readFileSync('ocr-worker.js', 'utf8'), context);
   return { context, messages };
 }

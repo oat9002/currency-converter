@@ -15,10 +15,10 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,1..1000&display=swap">
   <link rel="stylesheet" href="tailwind.css">
 </head>
-<body class="min-h-screen bg-nm-bg text-nm-text font-sans text-base overflow-y-hidden transition-colors duration-300">
-  <div class="min-h-screen flex flex-col items-center justify-center px-8">
-    <form class="bg-nm-bg rounded-[32px] shadow-nm-flat p-8 w-full max-w-[340px] flex flex-col gap-5 mx-4 relative border border-white/80 dark:border-white/5" autocomplete="off" onsubmit="return false;">
-      <button id="theme-toggle" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-nm-bg text-nm-text shadow-nm-btn active:shadow-nm-btn-active cursor-pointer flex items-center justify-center transition-all duration-300 z-10 select-none border border-white/60 dark:border-white/5" aria-label="Toggle dark mode">
+<body class="min-h-screen bg-nm-bg text-nm-text font-sans text-base transition-colors duration-300">
+  <div class="min-h-screen flex flex-col items-center justify-center px-4 py-8">
+    <form class="bg-nm-bg rounded-[32px] shadow-nm-flat p-8 w-full max-w-[380px] flex flex-col gap-5 mx-4 relative border border-white/80 dark:border-white/5" autocomplete="off" onsubmit="return false;">
+      <button id="theme-toggle" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-nm-bg text-nm-text shadow-nm-btn active:shadow-nm-btn-active cursor-pointer flex items-center justify-center transition-all duration-300 z-10 select-none border border-white/60 dark:border-white/5" data-i18n-aria-label="toggleTheme" aria-label="Toggle dark mode" type="button">
         <svg id="sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="5"></circle>
           <line x1="12" y1="1" x2="12" y2="3"></line>
@@ -34,27 +34,25 @@
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
         </svg>
       </button>
-      <div class="text-center text-2xl font-bold tracking-tight text-nm-text mb-2 mt-2 pt-2">Currency Converter</div>
-      <div class="flex items-center justify-start gap-2 mb-2">
-        <label for="currency-select" class="text-sm text-nm-muted mb-0 font-medium">Convert to:</label>
-        <select id="currency-select" class="text-sm px-4 py-2 rounded-xl bg-nm-bg shadow-nm-sunken outline-none transition-all duration-200 cursor-pointer min-w-[100px] text-nm-text font-semibold border border-transparent focus:border-blue-500/30 focus:ring-2 focus:ring-blue-500/15">
-          <option value="idr">IDR</option>
-          <option value="php">PHP</option>
-          <option value="jpy">JPY</option>
-          <option value="myr">MYR</option>
-          <option value="cny">CNY</option>
-          <option value="krw">KRW</option>
-          <option value="sgd">SGD</option>
-          <option value="hkd">HKD</option>
-          <option value="vnd">VND</option>
+      <h1 data-i18n="appTitle" class="text-center text-2xl font-bold tracking-tight text-nm-text mb-2 mt-2 pt-2 pr-8">Currency Converter</h1>
+      <div class="flex flex-wrap items-center gap-2">
+        <label for="language-select" data-i18n="language" class="text-sm text-nm-muted font-medium">Language</label>
+        <select id="language-select" class="compact-select text-sm px-4 py-2 rounded-xl bg-nm-bg shadow-nm-sunken cursor-pointer text-nm-text font-semibold border border-transparent focus:border-blue-500/30 focus:ring-2 focus:ring-blue-500/15">
+          <option value="en" lang="en">English</option>
         </select>
       </div>
-      <button id="camera-btn" class="flex items-center justify-center gap-2 px-6 py-3 bg-nm-bg text-blue-600 dark:text-blue-400 border border-white/60 dark:border-white/5 rounded-2xl text-base font-semibold cursor-pointer shadow-nm-btn active:shadow-nm-btn-active transition-all duration-300 mb-2 w-full select-none" type="button" aria-label="Open camera">
+      <div class="flex flex-wrap items-center gap-2 mb-2">
+        <label for="currency-select" data-i18n="convertTo" class="text-sm text-nm-muted font-medium">Convert to:</label>
+        <select id="currency-select" class="compact-select text-sm px-4 py-2 rounded-xl bg-nm-bg shadow-nm-sunken cursor-pointer text-nm-text font-semibold border border-transparent focus:border-blue-500/30 focus:ring-2 focus:ring-blue-500/15">
+          <option value="idr">IDR</option>
+        </select>
+      </div>
+      <button id="camera-btn" class="flex items-center justify-center gap-2 px-6 py-3 bg-nm-bg text-blue-600 dark:text-blue-400 border border-white/60 dark:border-white/5 rounded-2xl text-base font-semibold cursor-pointer shadow-nm-btn active:shadow-nm-btn-active transition-all duration-300 mb-2 w-full select-none" type="button" data-i18n-aria-label="openCamera" aria-label="Open camera">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
           <circle cx="12" cy="13" r="4"></circle>
         </svg>
-        <span>Camera Scan</span>
+        <span data-i18n="cameraScan">Camera Scan</span>
       </button>
       <div class="flex flex-col gap-2">
         <label for="thb" class="text-sm text-nm-muted mb-1 pl-1 flex items-center justify-between font-medium">
@@ -81,10 +79,10 @@
   
   <!-- Camera Modal -->
   <div id="camera-modal" class="hidden fixed inset-0 w-full h-full backdrop-blur-md bg-black/60 z-[1000] items-center justify-center flex-col px-4" style="display: none;">
-    <div class="w-full max-w-[480px] max-h-[90vh] flex flex-col bg-nm-bg rounded-[32px] overflow-hidden shadow-nm-flat border border-white/80 dark:border-white/5">
+    <div class="w-full max-w-[480px] max-h-[90vh] flex flex-col bg-nm-bg rounded-[32px] overflow-y-auto shadow-nm-flat border border-white/80 dark:border-white/5">
       <div class="flex justify-between items-center p-5 border-b border-white/20 dark:border-white/5 text-nm-text">
-        <h3 class="m-0 text-lg font-bold">OCR Camera Scan</h3>
-        <button id="close-camera" class="bg-transparent border-none text-nm-text text-2xl cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5" aria-label="Close camera">×</button>
+        <h2 data-i18n="cameraTitle" class="m-0 text-lg font-bold">Scan an amount</h2>
+        <button id="close-camera" class="bg-transparent border-none text-nm-text text-2xl cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5" data-i18n-aria-label="closeCamera" aria-label="Close camera">×</button>
       </div>
       <div class="p-4 flex flex-col gap-4">
         <div class="relative rounded-2xl overflow-hidden border border-white/60 dark:border-white/5 shadow-nm-sunken bg-black">
@@ -92,21 +90,24 @@
           <div id="camera-guide" class="pointer-events-none absolute inset-x-[12%] top-[18%] h-[38%] border-2 border-blue-400/80 rounded-2xl" style="box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);"></div>
           <canvas id="camera-canvas" style="display: none;"></canvas>
         </div>
-        <div id="ocr-status" class="hidden flex items-center justify-center gap-3 p-3 rounded-xl bg-nm-bg shadow-nm-sunken text-nm-text text-sm font-semibold" style="display: none;">
+        <div id="ocr-status" role="status" class="hidden flex items-center justify-center gap-3 p-3 rounded-xl bg-nm-bg shadow-nm-sunken text-nm-text text-sm font-semibold" style="display: none;">
           <div class="ocr-spinner"></div>
-          <span>Reading numbers...</span>
+          <span data-i18n="reading">Reading numbers…</span>
         </div>
-        <div id="ocr-candidates" class="hidden flex flex-col gap-2 p-3 rounded-xl bg-nm-bg shadow-nm-sunken text-nm-text text-sm font-semibold" style="display: none;">
+        <div id="ocr-candidates" role="group" aria-labelledby="ocr-choice-label" class="hidden flex flex-col gap-2 p-3 rounded-xl bg-nm-bg shadow-nm-sunken text-nm-text text-sm font-semibold" style="display: none;">
           <!-- Candidate buttons will be injected here -->
         </div>
       </div>
-      <div class="flex gap-4 p-5 justify-center border-t border-white/20 dark:border-white/5">
-        <button id="capture-btn" class="px-6 py-3 border-none rounded-xl text-base font-semibold cursor-pointer transition-all duration-300 bg-nm-bg text-blue-600 dark:text-blue-400 shadow-nm-btn active:shadow-nm-btn-active disabled:opacity-60 disabled:cursor-not-allowed select-none" type="button">Capture</button>
-        <button id="stop-camera" class="px-6 py-3 border-none rounded-xl text-base font-semibold cursor-pointer transition-all duration-300 bg-nm-bg text-red-600 dark:text-red-400 shadow-nm-btn active:shadow-nm-btn-active select-none" type="button">Close</button>
+      <div class="flex flex-wrap gap-4 p-5 justify-center border-t border-white/20 dark:border-white/5">
+        <button id="capture-btn" data-i18n="capture" class="px-6 py-3 border-none rounded-xl text-base font-semibold cursor-pointer transition-all duration-300 bg-nm-bg text-blue-600 dark:text-blue-400 shadow-nm-btn active:shadow-nm-btn-active disabled:opacity-60 disabled:cursor-not-allowed select-none" type="button">Capture</button>
+        <button id="stop-camera" data-i18n="close" class="px-6 py-3 border-none rounded-xl text-base font-semibold cursor-pointer transition-all duration-300 bg-nm-bg text-red-600 dark:text-red-400 shadow-nm-btn active:shadow-nm-btn-active select-none" type="button">Close</button>
       </div>
     </div>
   </div>
   
+  <script src="app-config.js" defer></script>
+  <script src="translations.js" defer></script>
+  <script src="i18n.js" defer></script>
   <script src="script.js" defer></script>
   <script>
     if ('serviceWorker' in navigator) {

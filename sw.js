@@ -1,11 +1,14 @@
 // Keep this stable across service-worker restarts; install-time globals are not persisted.
-const CACHE_NAME = 'currency-converter-v1.0.16';
+const CACHE_NAME = 'currency-converter-v1.0.19';
 
 const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/style.css',
   '/tailwind.css',
+  '/app-config.js',
+  '/translations.js',
+  '/i18n.js',
   '/script.js',
   '/ocr-worker.js',
   '/sw.js',

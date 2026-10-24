@@ -1,42 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
+const { loadApp } = require('./app-fixture.cjs');
 const tick = () => new Promise(resolve => setImmediate(resolve));
-
-function loadApp(overrides = {}) {
-  const elements = new Map();
-  const workers = [];
-  let state = { selectedCurrency: 'vnd' };
-  function element(id) {
-    if (!elements.has(id)) elements.set(id, {
-      value: id === 'currency-select' ? 'idr' : '', style: {}, children: [], listeners: {},
-      querySelector() { return element(id + '-span'); },
-      addEventListener(type, callback) { this.listeners[type] = callback; },
-      replaceChildren() { this.children = []; },
-      appendChild(child) { this.children.push(child); },
-      toBlob(callback) { callback({ blob: true }); },
-      getContext() { return { drawImage() {} }; },
-      getBoundingClientRect() { return { left: 0, top: 0, right: 100, bottom: 100, width: 100, height: 100 }; }
-    });
-    return elements.get(id);
-  }
-  class Worker {
-    constructor() { workers.push(this); }
-    postMessage(message) { this.message = message; }
-    terminate() { this.terminated = true; }
-  }
-  const context = vm.createContext({
-    console: { error() {}, warn() {} }, setTimeout, clearTimeout, AbortSignal, Worker,
-    document: { getElementById: element, createElement: () => element('button-' + Math.random()) },
-    window: { addEventListener() {} }, navigator: {}, alert() {},
-    localStorage: { getItem: () => JSON.stringify(state), setItem: (_, raw) => { state = JSON.parse(raw); } },
-    // Keep startup fetching pending; tests supply rates deliberately.
-    fetch: () => new Promise(() => {}), ...overrides
-  });
-  vm.runInContext(fs.readFileSync('script.js', 'utf8').split('// Theme toggle functionality')[0], context);
-  return { context, element, workers, state: () => state };
-}
 
 test('preserves entered amount through rate refresh and supports both conversion directions and zero', () => {
   const { context, element } = loadApp();
@@ -144,8 +109,10 @@ test('ambiguous candidates require selection, then apply using current currency 
   const { context, element } = loadApp();
   context.applyRates({ vnd: 750 });
   context.showCandidateOptions([{ value: 75025, confidence: 73, score: 130 }]);
-  const option = element('ocr-candidates').children[0];
-  assert.match(option.textContent, /confidence 73/);
+  const [prompt, option] = element('ocr-candidates').children;
+  assert.equal(prompt.textContent, 'Choose the correct amount:');
+  assert.equal(prompt.id, 'ocr-choice-label');
+  assert.equal(option.textContent, context.formatNumber(75025));
   option.listeners.click();
   assert.equal(element('second-currency').value, '75025');
   assert.equal(element('thb').value, '100.03');

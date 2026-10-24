@@ -1,5 +1,5 @@
 // Tesseract is loaded only in this worker, on the first scan.
-importScripts('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
+importScripts('app-config.js', 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
 
 let workerPromise = null;
 let processingCanvas = null;
@@ -52,10 +52,14 @@ function normalizeDigits(value) {
     .replace(/[\u200B-\u200D\uFEFF]/g, '');
 }
 
+const CURRENCY_PATTERN = Object.keys(CurrencyConverterConfig.currencies).join('|');
+const LEADING_CURRENCY = new RegExp(`^(?:${CURRENCY_PATTERN})\\s*`, 'i');
+const TRAILING_CURRENCY = new RegExp(`\\s*(?:${CURRENCY_PATTERN})$`, 'i');
+
 function parseMoneyCandidateLocal(raw) {
   let pattern = normalizeDigits(raw).trim()
-    .replace(/^(?:THB|IDR|PHP|JPY|MYR|CNY|KRW|SGD|HKD|VND)\s*/i, '')
-    .replace(/\s*(?:THB|IDR|PHP|JPY|MYR|CNY|KRW|SGD|HKD|VND)$/i, '')
+    .replace(LEADING_CURRENCY, '')
+    .replace(TRAILING_CURRENCY, '')
     .replace(/^[฿$€£¥₫₱₩]+|[฿$€£¥₫₱₩]+$/g, '').trim();
   // Validate the entire token: dates, IDs, and malformed separator groups aren't amounts.
   if (!/^\d+(?:[.,]\d{1,2})?$/.test(pattern) &&

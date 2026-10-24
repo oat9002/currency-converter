@@ -34,4 +34,7 @@ test('offline installation caches OCR worker alongside the converter', async () 
   await complete;
   assert.ok(urls.includes('/ocr-worker.js'));
   assert.ok(urls.includes('/script.js'));
+  for (const dependency of ['/app-config.js', '/translations.js', '/i18n.js']) {
+    assert.ok(urls.includes(dependency), dependency + ' must be available offline');
+  }
 });

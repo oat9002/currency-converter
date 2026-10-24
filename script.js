@@ -2,8 +2,10 @@
 const API_URL = 'https://latest.currency-api.pages.dev/v1/currencies/thb.json';
 const STORAGE_KEY = 'currencyConverter_state';
 const RATES_TTL_MS = 24 * 60 * 60 * 1000;
-const CURRENCIES = { idr: 0, php: 2, jpy: 0, myr: 2, cny: 2, krw: 0, sgd: 2, hkd: 2, vnd: 0 };
-const CURRENCY_CODES = Object.keys(CURRENCIES);
+const { currencies: CURRENCIES, baseCurrency: BASE_CURRENCY } = CurrencyConverterConfig;
+const CURRENCY_CODES = Object.keys(CURRENCIES).filter(code => code !== BASE_CURRENCY);
+const I18N = CurrencyConverterI18n;
+I18N.setLanguage(I18N.initialLanguage(readStorageState().language, navigator.languages || [navigator.language]));
 
 // Get elements
 const thb = document.getElementById('thb');
@@ -13,6 +15,7 @@ const secondCurrencyRate = document.getElementById('second-currency-rate');
 const currencyName = secondCurrencyLabel.querySelector('span');
 const thbRateElement = document.getElementById('thb-rate');
 const currencySelect = document.getElementById('currency-select');
+const languageSelect = document.getElementById('language-select');
 let exchangeRates = normalizeRates();
 let inputSource = 'thb';
 
@@ -121,19 +124,19 @@ function getCurrencyLabel(currency) {
 }
 
 function getDisplayPrecision(currency) {
-  return CURRENCIES[currency] ?? 2;
+  return CURRENCIES[currency]?.precision ?? 2;
 }
 
 // Update the display based on selected currency
 function updateCurrencyDisplay() {
   const selectedCurrency = currencySelect.value;
   const selectedRate = getSelectedRate(selectedCurrency);
-  const rateText = selectedRate ? selectedRate.toFixed(2) : '—';
-  const inverseRateText = selectedRate ? (1 / selectedRate).toFixed(4) : '—';
+  const rateText = selectedRate ? I18N.formatNumber(selectedRate, 2) : '—';
+  const inverseRateText = selectedRate ? I18N.formatNumber(1 / selectedRate, 4) : '—';
   const currencyLabel = getCurrencyLabel(selectedCurrency);
   currencyName.textContent = currencyLabel;
-  thbRateElement.textContent = selectedRate ? `(1 THB = ${rateText} ${currencyLabel})` : '(rate unavailable)';
-  secondCurrencyRate.textContent = selectedRate ? `(1 ${currencyLabel} = ${inverseRateText} THB)` : '(rate unavailable)';
+  thbRateElement.textContent = selectedRate ? I18N.t('exchangeRate', { amount: 1, from: 'THB', rate: rateText, to: currencyLabel }) : I18N.t('rateUnavailable');
+  secondCurrencyRate.textContent = selectedRate ? I18N.t('exchangeRate', { amount: 1, from: currencyLabel, rate: inverseRateText, to: 'THB' }) : I18N.t('rateUnavailable');
 }
 
 // Conversion functions
@@ -162,6 +165,12 @@ function recalculateInputs() {
   target.value = converted.toFixed(fromTHB ? getDisplayPrecision(currency) : 2);
 }
 
+currencySelect.replaceChildren(...CURRENCY_CODES.map(code => {
+  const option = document.createElement('option');
+  option.value = code;
+  option.textContent = getCurrencyLabel(code);
+  return option;
+}));
 loadSavedCurrency();
 loadExchangeRates();
 
@@ -192,6 +201,8 @@ const ocrCandidates = document.getElementById('ocr-candidates');
 let stream = null;
 let cameraSession = 0;
 let cameraTimer = null;
+let scanStatus = null;
+let candidateChoices = [];
 let ocrWorker = null;
 let nextOCRId = 0;
 const pendingOCR = new Map();
@@ -216,7 +227,7 @@ cameraBtn.addEventListener('click', async () => {
     if (session !== cameraSession) return;
     console.error('Error accessing camera:', error);
     closeCamera();
-    alert('Unable to access camera. Please check permissions.');
+    alert(I18N.t('cameraError'));
   }
 });
 
@@ -240,6 +251,8 @@ function closeCamera() {
   ocrStatus.style.display = 'none';
   ocrCandidates.style.display = 'none';
   ocrCandidates.replaceChildren();
+  scanStatus = null;
+  candidateChoices = [];
   // Keep a ready worker for the next scan, but cancel unfinished work.
   if (pendingOCR.size) resetOCRWorker();
   captureBtn.disabled = false;
@@ -255,10 +268,11 @@ window.addEventListener('pagehide', () => {
   resetOCRWorker();
 });
 
-function showScanStatus(message, closeAfter = 0) {
+function showScanStatus(key, params = {}, closeAfter = 0) {
   clearTimeout(cameraTimer);
+  scanStatus = { key, params };
   ocrStatus.style.display = 'flex';
-  ocrStatus.textContent = message;
+  ocrStatus.textContent = I18N.t(key, params);
   if (closeAfter) cameraTimer = setTimeout(closeCamera, closeAfter);
 }
 
@@ -344,19 +358,19 @@ function runOCROnCanvas(canvas, session, timeoutMs = 60000) {
 captureBtn.addEventListener('click', async () => {
   if (captureBtn.disabled) return;
   if (!cameraVideo.videoWidth || !cameraVideo.videoHeight) {
-    showScanStatus('Camera not ready. Try again.');
+    showScanStatus('cameraNotReady');
     return;
   }
   const session = cameraSession;
   captureBtn.disabled = true;
   ocrCandidates.style.display = 'none';
-  showScanStatus('Reading numbers… The first scan may take longer.');
+  showScanStatus('readingFirst');
   try {
     const result = await runOCROnCanvas(getCaptureCanvas(), session);
     if (session !== cameraSession) return;
     const candidates = result?.candidates || [];
     if (!candidates.length) {
-      showScanStatus('No usable amount found. Try again.');
+      showScanStatus('noAmount');
       captureBtn.disabled = false;
       return;
     }
@@ -364,20 +378,20 @@ captureBtn.addEventListener('click', async () => {
     // A ranking score is not a confidence percentage. Require both confidence and separation.
     if (top.confidence >= 90 && top.score >= 120 && (!runnerUp || top.score - runnerUp.score >= 25)) {
       applyExtractedValue(top.value);
-      showScanStatus('✓ Number detected: ' + formatNumber(top.value), 1200);
+      showScanStatus('detected', { amount: top.value }, 1200);
     } else {
       showCandidateOptions(candidates);
     }
   } catch (error) {
     if (session !== cameraSession) return;
     console.error('OCR error:', error);
-    showScanStatus('Unable to read image. Please retry.');
+    showScanStatus('scanError');
     captureBtn.disabled = false;
   }
 });
 
 function formatNumber(n) {
-  return Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return I18N.formatNumber(n);
 }
 
 function applyExtractedValue(value) {
@@ -388,20 +402,26 @@ function applyExtractedValue(value) {
 
 // Render candidate buttons for user to choose
 function showCandidateOptions(candidates) {
+  candidateChoices = candidates;
   const container = ocrCandidates;
   container.innerHTML = '';
   container.style.display = 'flex';
   ocrStatus.style.display = 'none';
 
+  const prompt = document.createElement('p');
+  prompt.id = 'ocr-choice-label';
+  prompt.textContent = I18N.t('chooseAmount');
+  container.appendChild(prompt);
+
   candidates.slice(0, 3).forEach(c => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'px-4 py-2 rounded-xl bg-nm-bg text-nm-text border border-white/40 hover:bg-black/5';
-    btn.textContent = `${formatNumber(c.value)}  — confidence ${Math.round(c.confidence)}`;
+    btn.textContent = formatNumber(c.value);
     btn.addEventListener('click', () => {
       container.style.display = 'none';
       applyExtractedValue(c.value);
-      showScanStatus('✓ Selected: ' + formatNumber(c.value), 900);
+      showScanStatus('selected', { amount: c.value }, 900);
     });
     container.appendChild(btn);
   });
@@ -409,7 +429,7 @@ function showCandidateOptions(candidates) {
   const retry = document.createElement('button');
   retry.type = 'button';
   retry.className = 'px-4 py-2 rounded-xl bg-nm-bg text-red-600 border border-white/40 hover:bg-black/5';
-  retry.textContent = 'None of these — Retry';
+  retry.textContent = I18N.t('retry');
   retry.addEventListener('click', () => {
     container.style.display = 'none';
     ocrStatus.style.display = 'none';
@@ -417,6 +437,41 @@ function showCandidateOptions(candidates) {
   });
   container.appendChild(retry);
 }
+
+// Native language names stay readable even when the current interface is unfamiliar.
+function refreshLanguage() {
+  document.documentElement.lang = I18N.locale;
+  document.title = I18N.t('pageTitle');
+  document.querySelector('meta[name="description"]').content = I18N.t('pageDescription');
+  document.querySelectorAll('[data-i18n]').forEach(element => {
+    element.textContent = I18N.t(element.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-aria-label]').forEach(element => {
+    element.setAttribute('aria-label', I18N.t(element.dataset.i18nAriaLabel));
+  });
+  languageSelect.value = I18N.language;
+  updateCurrencyDisplay();
+  if (scanStatus && ocrStatus.style.display !== 'none') {
+    ocrStatus.textContent = I18N.t(scanStatus.key, scanStatus.params);
+  }
+  if (ocrCandidates.style.display === 'flex') showCandidateOptions(candidateChoices);
+}
+
+languageSelect.replaceChildren(...I18N.supportedLanguages.map(code => {
+  const option = document.createElement('option');
+  option.value = code;
+  option.lang = CurrencyConverterConfig.languages[code].locale;
+  option.textContent = CurrencyConverterConfig.languages[code].name;
+  return option;
+}));
+languageSelect.addEventListener('change', () => {
+  if (!I18N.setLanguage(languageSelect.value)) return;
+  const state = readStorageState();
+  state.language = I18N.language;
+  writeStorageState(state);
+  refreshLanguage();
+});
+refreshLanguage();
 
 // Theme toggle functionality
 function initThemeToggle() {

@@ -106,3 +106,12 @@ select:focus {
 select:focus::-webkit-calendar-picker-indicator {
   filter: brightness(0.5);
 }
+
+/* Older browsers use the native intrinsic width when field-sizing is unsupported. */
+.compact-select {
+  width: auto;
+  min-inline-size: 6rem;
+  max-inline-size: 100%;
+  field-sizing: content;
+  flex: 0 1 auto;
+}

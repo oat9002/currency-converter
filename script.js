@@ -47,7 +47,8 @@ let exchangeRates = {
   cny: null,
   krw: null,
   sgd: null,
-  hkd: null
+  hkd: null,
+  vnd: null
 };
 
 // Reusable offscreen canvas for preprocessing to reduce allocations
@@ -117,7 +118,8 @@ function applyRates(ratesData) {
     cny: ratesData.cny ?? null,
     krw: ratesData.krw ?? null,
     sgd: ratesData.sgd ?? null,
-    hkd: ratesData.hkd ?? null
+    hkd: ratesData.hkd ?? null,
+    vnd: ratesData.vnd ?? null
   };
   updateCurrencyDisplay();
 }
@@ -143,10 +145,11 @@ async function loadExchangeRates() {
       cny: data?.thb?.cny ?? null,
       krw: data?.thb?.krw ?? null,
       sgd: data?.thb?.sgd ?? null,
-      hkd: data?.thb?.hkd ?? null
+      hkd: data?.thb?.hkd ?? null,
+      vnd: data?.thb?.vnd ?? null
     };
 
-    if (fetchedRates.idr && fetchedRates.php && fetchedRates.jpy && fetchedRates.myr && fetchedRates.cny && fetchedRates.krw && fetchedRates.sgd && fetchedRates.hkd) {
+    if (fetchedRates.idr && fetchedRates.php && fetchedRates.jpy && fetchedRates.myr && fetchedRates.cny && fetchedRates.krw && fetchedRates.sgd && fetchedRates.hkd && fetchedRates.vnd) {
       saveRatesToCache(fetchedRates);
       applyRates(fetchedRates);
     }
@@ -159,7 +162,7 @@ async function loadExchangeRates() {
 function loadSavedCurrency() {
   const state = readStorageState();
   const saved = state.selectedCurrency;
-  if (saved === 'idr' || saved === 'php' || saved === 'jpy') {
+  if (Object.prototype.hasOwnProperty.call(exchangeRates, saved)) {
     currencySelect.value = saved;
   }
   updateCurrencyDisplay();
@@ -181,14 +184,15 @@ function getCurrencyLabel(currency) {
     cny: 'CNY',
     krw: 'KRW',
     sgd: 'SGD',
-    hkd: 'HKD'
+    hkd: 'HKD',
+    vnd: 'VND'
   };
 
   return labels[currency] || currency.toUpperCase();
 }
 
 function getDisplayPrecision(currency) {
-  return ['idr', 'jpy', 'krw'].includes(currency) ? 0 : 2;
+  return ['idr', 'jpy', 'krw', 'vnd'].includes(currency) ? 0 : 2;
 }
 
 // Update the display based on selected currency

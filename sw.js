@@ -1,5 +1,5 @@
-const CACHE_VERSION_URL = '/version.json';
-let CACHE_NAME = 'currency-converter'; // Default fallback
+// Keep this stable across service-worker restarts; install-time globals are not persisted.
+const CACHE_NAME = 'currency-converter-v1.0.16';
 
 const PRECACHE_URLS = [
   '/',
@@ -7,27 +7,17 @@ const PRECACHE_URLS = [
   '/style.css',
   '/tailwind.css',
   '/script.js',
+  '/ocr-worker.js',
   '/sw.js',
   '/version.json'
 ];
 
-// Fetch version on install and set cache name
+// Changing this worker also triggers delivery of updated cached application code.
 self.addEventListener('install', event => {
   event.waitUntil(
-    fetch(CACHE_VERSION_URL)
-      .then(response => response.json())
-      .then(data => {
-        CACHE_NAME = 'currency-converter-v' + data.version;
-        return caches.open(CACHE_NAME)
-          .then(cache => cache.addAll(PRECACHE_URLS))
-          .then(() => self.skipWaiting());
-      })
-      .catch(() => {
-        // Fallback if version.json fetch fails
-        return caches.open(CACHE_NAME)
-          .then(cache => cache.addAll(PRECACHE_URLS))
-          .then(() => self.skipWaiting());
-      })
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(PRECACHE_URLS))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -36,7 +26,7 @@ self.addEventListener('activate', event => {
     caches.keys().then(cacheNames =>
       Promise.all(
         cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
+          if (cacheName !== CACHE_NAME && cacheName.startsWith('currency-converter')) {
             return caches.delete(cacheName);
           }
           return undefined;

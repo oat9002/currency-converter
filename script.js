@@ -2,72 +2,32 @@
 const API_URL = 'https://latest.currency-api.pages.dev/v1/currencies/thb.json';
 const STORAGE_KEY = 'currencyConverter_state';
 const RATES_TTL_MS = 24 * 60 * 60 * 1000;
-const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-let tesseractPromise = null;
-
-async function loadTesseractIfNeeded() {
-  if (window.Tesseract) {
-    return window.Tesseract;
-  }
-
-  if (!tesseractPromise) {
-    tesseractPromise = new Promise((resolve, reject) => {
-      const existingScript = document.querySelector('script[data-tesseract-script]');
-      if (existingScript) {
-        existingScript.addEventListener('load', () => resolve(window.Tesseract), { once: true });
-        existingScript.addEventListener('error', () => reject(new Error('Unable to load OCR library.')), { once: true });
-        return;
-      }
-
-      const script = document.createElement('script');
-      script.src = TESSERACT_URL;
-      script.async = true;
-      script.dataset.tesseractScript = 'true';
-      script.onload = () => resolve(window.Tesseract);
-      script.onerror = () => reject(new Error('Unable to load OCR library.'));
-      document.head.appendChild(script);
-    });
-  }
-
-  return tesseractPromise;
-}
+const CURRENCIES = { idr: 0, php: 2, jpy: 0, myr: 2, cny: 2, krw: 0, sgd: 2, hkd: 2, vnd: 0 };
+const CURRENCY_CODES = Object.keys(CURRENCIES);
 
 // Get elements
 const thb = document.getElementById('thb');
 const secondCurrency = document.getElementById('second-currency');
 const secondCurrencyLabel = document.getElementById('second-currency-label');
 const secondCurrencyRate = document.getElementById('second-currency-rate');
+const currencyName = secondCurrencyLabel.querySelector('span');
+const thbRateElement = document.getElementById('thb-rate');
 const currencySelect = document.getElementById('currency-select');
-let lastEdited = null;
-let exchangeRates = {
-  idr: null,
-  php: null,
-  jpy: null,
-  myr: null,
-  cny: null,
-  krw: null,
-  sgd: null,
-  hkd: null,
-  vnd: null
-};
+let exchangeRates = normalizeRates();
+let inputSource = 'thb';
 
-// Reusable offscreen canvas for preprocessing to reduce allocations
-let ocrOffscreen = document.createElement('canvas');
-function getOffscreenCanvas(w, h) {
-  if (ocrOffscreen.width !== w || ocrOffscreen.height !== h) {
-    ocrOffscreen.width = w;
-    ocrOffscreen.height = h;
-  }
-  return ocrOffscreen;
+function normalizeRates(data = {}) {
+  return Object.fromEntries(CURRENCY_CODES.map(code => {
+    const rate = data?.[code];
+    return [code, Number.isFinite(rate) && rate > 0 ? rate : null];
+  }));
 }
-
-// Money regex (hoisted to avoid recreating it on every capture)
-const MONEY_RE = /(?:\d{1,3}(?:[\s,\.]\d{3})+|\d+)(?:[.,]\d{1,2})?/g;
 
 function readStorageState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    const state = raw ? JSON.parse(raw) : null;
+    return state && typeof state === 'object' && !Array.isArray(state) ? state : {};
   } catch (error) {
     console.warn('Unable to read currency converter storage:', error);
     return {};
@@ -110,18 +70,9 @@ function getSelectedRate(currency) {
 }
 
 function applyRates(ratesData) {
-  exchangeRates = {
-    idr: ratesData.idr ?? null,
-    php: ratesData.php ?? null,
-    jpy: ratesData.jpy ?? null,
-    myr: ratesData.myr ?? null,
-    cny: ratesData.cny ?? null,
-    krw: ratesData.krw ?? null,
-    sgd: ratesData.sgd ?? null,
-    hkd: ratesData.hkd ?? null,
-    vnd: ratesData.vnd ?? null
-  };
+  exchangeRates = normalizeRates(ratesData);
   updateCurrencyDisplay();
+  recalculateInputs();
 }
 
 async function loadExchangeRates() {
@@ -131,25 +82,15 @@ async function loadExchangeRates() {
   }
 
   try {
-    const response = await fetch(API_URL);
+    const response = await fetch(API_URL, { signal: AbortSignal.timeout(10000) });
     if (!response.ok) {
       throw new Error(`Request failed with status ${response.status}`);
     }
 
     const data = await response.json();
-    const fetchedRates = {
-      idr: data?.thb?.idr ?? null,
-      php: data?.thb?.php ?? null,
-      jpy: data?.thb?.jpy ?? null,
-      myr: data?.thb?.myr ?? null,
-      cny: data?.thb?.cny ?? null,
-      krw: data?.thb?.krw ?? null,
-      sgd: data?.thb?.sgd ?? null,
-      hkd: data?.thb?.hkd ?? null,
-      vnd: data?.thb?.vnd ?? null
-    };
+    const fetchedRates = normalizeRates(data?.thb);
 
-    if (fetchedRates.idr && fetchedRates.php && fetchedRates.jpy && fetchedRates.myr && fetchedRates.cny && fetchedRates.krw && fetchedRates.sgd && fetchedRates.hkd && fetchedRates.vnd) {
+    if (Object.values(fetchedRates).some(rate => rate !== null)) {
       saveRatesToCache(fetchedRates);
       applyRates(fetchedRates);
     }
@@ -176,23 +117,11 @@ function saveCurrencySelection(currency) {
 }
 
 function getCurrencyLabel(currency) {
-  const labels = {
-    idr: 'IDR',
-    php: 'PHP',
-    jpy: 'JPY',
-    myr: 'MYR',
-    cny: 'CNY',
-    krw: 'KRW',
-    sgd: 'SGD',
-    hkd: 'HKD',
-    vnd: 'VND'
-  };
-
-  return labels[currency] || currency.toUpperCase();
+  return currency.toUpperCase();
 }
 
 function getDisplayPrecision(currency) {
-  return ['idr', 'jpy', 'krw', 'vnd'].includes(currency) ? 0 : 2;
+  return CURRENCIES[currency] ?? 2;
 }
 
 // Update the display based on selected currency
@@ -202,25 +131,9 @@ function updateCurrencyDisplay() {
   const rateText = selectedRate ? selectedRate.toFixed(2) : '—';
   const inverseRateText = selectedRate ? (1 / selectedRate).toFixed(4) : '—';
   const currencyLabel = getCurrencyLabel(selectedCurrency);
-  const sharedRateClasses = 'text-xs text-nm-muted font-normal ml-2';
-
-  secondCurrencyLabel.innerHTML = `${currencyLabel} <span id="second-currency-rate" class="${sharedRateClasses} rate-info"></span>`;
-
-  const thbRateElement = document.getElementById('thb-rate');
-  if (thbRateElement) {
-    thbRateElement.className = sharedRateClasses;
-    thbRateElement.textContent = selectedRate ? `(1 THB = ${rateText} ${currencyLabel})` : '(loading rate...)';
-  }
-
-  // Update rate reference after DOM update
-  const rateElement = document.getElementById('second-currency-rate');
-  if (rateElement) {
-    rateElement.className = sharedRateClasses;
-    rateElement.textContent = selectedRate ? `(1 ${currencyLabel} = ${inverseRateText} THB)` : '(loading rate...)';
-  }
-
-  // Clear the second currency input when switching
-  secondCurrency.value = '';
+  currencyName.textContent = currencyLabel;
+  thbRateElement.textContent = selectedRate ? `(1 THB = ${rateText} ${currencyLabel})` : '(rate unavailable)';
+  secondCurrencyRate.textContent = selectedRate ? `(1 ${currencyLabel} = ${inverseRateText} THB)` : '(rate unavailable)';
 }
 
 // Conversion functions
@@ -234,46 +147,36 @@ function convertToTHB(secondCurrencyValue, sourceCurrency) {
   return rate ? secondCurrencyValue / rate : 0;
 }
 
-// Initialize on page load
+// Keep the last edited amount when selection or exchange rates change.
+function recalculateInputs() {
+  const fromTHB = inputSource === 'thb';
+  const source = fromTHB ? thb : secondCurrency;
+  const target = fromTHB ? secondCurrency : thb;
+  const value = Number.parseFloat(source.value);
+  const currency = currencySelect.value;
+  if (!Number.isFinite(value) || !getSelectedRate(currency)) {
+    target.value = '';
+    return;
+  }
+  const converted = fromTHB ? convertFromTHB(value, currency) : convertToTHB(value, currency);
+  target.value = converted.toFixed(fromTHB ? getDisplayPrecision(currency) : 2);
+}
+
 loadSavedCurrency();
 loadExchangeRates();
 
-// Event listener for currency selection dropdown
-currencySelect.addEventListener('change', function() {
-  const selectedCurrency = currencySelect.value;
-  saveCurrencySelection(selectedCurrency);
+currencySelect.addEventListener('change', () => {
+  saveCurrencySelection(currencySelect.value);
   updateCurrencyDisplay();
+  recalculateInputs();
 });
-
-// Event listener for THB input
-thb.addEventListener('input', function() {
-  if (lastEdited === 'second') return;
-  lastEdited = 'thb';
-  const val = parseFloat(thb.value);
-  if (val) {
-    const selectedCurrency = currencySelect.value;
-    const converted = convertFromTHB(val, selectedCurrency);
-    const precision = getDisplayPrecision(selectedCurrency);
-    secondCurrency.value = converted.toFixed(precision);
-  } else {
-    secondCurrency.value = '';
-  }
-  lastEdited = null;
+thb.addEventListener('input', () => {
+  inputSource = 'thb';
+  recalculateInputs();
 });
-
-// Event listener for second currency input
-secondCurrency.addEventListener('input', function() {
-  if (lastEdited === 'thb') return;
-  lastEdited = 'second';
-  const val = parseFloat(secondCurrency.value);
-  if (val) {
-    const selectedCurrency = currencySelect.value;
-    const converted = convertToTHB(val, selectedCurrency);
-    thb.value = converted.toFixed(2);
-  } else {
-    thb.value = '';
-  }
-  lastEdited = null;
+secondCurrency.addEventListener('input', () => {
+  inputSource = 'second';
+  recalculateInputs();
 });
 
 // Camera functionality
@@ -285,318 +188,191 @@ const closeCameraBtn = document.getElementById('close-camera');
 const stopCameraBtn = document.getElementById('stop-camera');
 const captureBtn = document.getElementById('capture-btn');
 const ocrStatus = document.getElementById('ocr-status');
+const ocrCandidates = document.getElementById('ocr-candidates');
 let stream = null;
+let cameraSession = 0;
+let cameraTimer = null;
+let ocrWorker = null;
+let nextOCRId = 0;
+const pendingOCR = new Map();
 
-// Open camera modal
-cameraBtn.addEventListener('click', async function() {
+cameraBtn.addEventListener('click', async () => {
+  if (cameraModal.style.display === 'flex') return;
+  const session = ++cameraSession;
   cameraModal.style.display = 'flex';
+  captureBtn.disabled = true;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { 
-        facingMode: 'environment', // Use back camera on mobile
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      } 
+    const cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
     });
+    if (session !== cameraSession) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      return;
+    }
+    stream = cameraStream;
     cameraVideo.srcObject = stream;
+    captureBtn.disabled = false;
   } catch (error) {
+    if (session !== cameraSession) return;
     console.error('Error accessing camera:', error);
+    closeCamera();
     alert('Unable to access camera. Please check permissions.');
-    cameraModal.style.display = 'none';
   }
 });
 
-// Close camera modal
-function closeCamera() {
-  if (stream) {
-    stream.getTracks().forEach(track => track.stop());
-    stream = null;
+function resetOCRWorker(error = new Error('Scan cancelled')) {
+  if (ocrWorker) ocrWorker.terminate();
+  ocrWorker = null;
+  for (const entry of pendingOCR.values()) {
+    clearTimeout(entry.timer);
+    entry.reject(error);
   }
+  pendingOCR.clear();
+}
+
+function closeCamera() {
+  ++cameraSession;
+  clearTimeout(cameraTimer);
+  if (stream) stream.getTracks().forEach(track => track.stop());
+  stream = null;
   cameraVideo.srcObject = null;
   cameraModal.style.display = 'none';
   ocrStatus.style.display = 'none';
-  ocrStatus.innerHTML = '<div class="ocr-spinner"></div><span>Reading numbers...</span>';
+  ocrCandidates.style.display = 'none';
+  ocrCandidates.replaceChildren();
+  // Keep a ready worker for the next scan, but cancel unfinished work.
+  if (pendingOCR.size) resetOCRWorker();
   captureBtn.disabled = false;
 }
 
 closeCameraBtn.addEventListener('click', closeCamera);
 stopCameraBtn.addEventListener('click', closeCamera);
-
-// Close modal when clicking outside
-cameraModal.addEventListener('click', function(e) {
-  if (e.target === cameraModal) {
-    closeCamera();
-  }
+cameraModal.addEventListener('click', event => {
+  if (event.target === cameraModal) closeCamera();
+});
+window.addEventListener('pagehide', () => {
+  closeCamera();
+  resetOCRWorker();
 });
 
-function normalizeNumericText(rawText) {
-  const normalized = (rawText || '')
-    .replace(/[๐-๙]/g, ch => '๐๑๒๓๔๕๖๗๘๙'.indexOf(ch) )
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .replace(/[$€£¥]/g, '')
-    .replace(/O/g, '0')
-    .replace(/I/g, '1')
-    .replace(/l/g, '1')
-    .replace(/S/g, '5')
-    .replace(/B/g, '8');
-
-  return normalized;
-}
-
-function parseMoneyCandidate(rawPattern) {
-  if (!rawPattern) return null;
-
-  let pattern = rawPattern.trim();
-  if (!pattern) return null;
-
-  pattern = pattern.replace(/\s+/g, '');
-  pattern = pattern.replace(/[^\d.,]/g, '');
-  if (!pattern) return null;
-
-  if (pattern.includes(',') && pattern.includes('.')) {
-    const lastComma = pattern.lastIndexOf(',');
-    const lastDot = pattern.lastIndexOf('.');
-    const decimalSep = lastComma > lastDot ? ',' : '.';
-    const thousandSep = decimalSep === ',' ? '.' : ',';
-    pattern = pattern.replace(new RegExp(`\\${thousandSep}`, 'g'), '');
-    pattern = pattern.replace(decimalSep, '.');
-  } else if (pattern.includes(',')) {
-    const commaParts = pattern.split(',');
-    if (commaParts.length > 1 && commaParts[commaParts.length - 1].length <= 2) {
-      pattern = pattern.replace(/,/g, '.');
-    } else {
-      pattern = pattern.replace(/,/g, '');
-    }
-  } else if (pattern.includes('.')) {
-    const dotParts = pattern.split('.');
-    if (dotParts.length > 1 && dotParts[dotParts.length - 1].length <= 2) {
-      // keep decimal as is
-    } else {
-      pattern = pattern.replace(/\./g, '');
-    }
-  }
-
-  const value = Number.parseFloat(pattern);
-  if (!Number.isFinite(value)) return null;
-  if (value <= 0 || value > 10000000) return null;
-
-  return value;
-}
-
-function extractNumbers(text) {
-  if (!text) return null;
-
-  const normalized = normalizeNumericText(text);
-  const moneyMatches = [...normalized.matchAll(/(?:\d{1,3}(?:[\s,\.]\d{3})+|\d+)(?:[.,]\d{1,2})?/g)];
-  const candidateValues = [];
-
-  moneyMatches.forEach(match => {
-    const parsed = parseMoneyCandidate(match[0]);
-    if (parsed !== null) candidateValues.push(parsed);
-  });
-
-  if (candidateValues.length === 0) {
-    return null;
-  }
-
-  // Prefer values that are likely a total/amount, not dates or IDs.
-  const sorted = candidateValues
-    .filter(v => v >= 0.5 && v <= 9999999 && !(v >= 1900 && v <= 2100))
-    .sort((a, b) => b - a);
-
-  if (sorted.length === 0) return null;
-  return sorted[0];
+function showScanStatus(message, closeAfter = 0) {
+  clearTimeout(cameraTimer);
+  ocrStatus.style.display = 'flex';
+  ocrStatus.textContent = message;
+  if (closeAfter) cameraTimer = setTimeout(closeCamera, closeAfter);
 }
 
 function getCaptureCanvas() {
-  const targetWidth = cameraVideo.videoWidth || 1280;
-  const targetHeight = cameraVideo.videoHeight || 720;
-  const cropWidth = Math.min(targetWidth, Math.round(targetWidth * 0.82));
-  const cropHeight = Math.min(targetHeight, Math.round(targetHeight * 0.42));
-  const cropX = (targetWidth - cropWidth) / 2;
-  const cropY = (targetHeight - cropHeight) / 2;
-
-  const captureCanvas = document.createElement('canvas');
-  captureCanvas.width = cropWidth;
-  captureCanvas.height = cropHeight;
-  const ctx = captureCanvas.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(cameraVideo, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-  return captureCanvas;
+  const width = cameraVideo.videoWidth;
+  const height = cameraVideo.videoHeight;
+  // Match the guide drawn over the object-contain video, including letterboxing.
+  const videoRect = cameraVideo.getBoundingClientRect();
+  const guideRect = document.getElementById('camera-guide').getBoundingClientRect();
+  const scale = Math.min(videoRect.width / width, videoRect.height / height);
+  const left = videoRect.left + (videoRect.width - width * scale) / 2;
+  const top = videoRect.top + (videoRect.height - height * scale) / 2;
+  const x = Math.max(0, (guideRect.left - left) / scale);
+  const y = Math.max(0, (guideRect.top - top) / scale);
+  const right = Math.min(width, (guideRect.right - left) / scale);
+  const bottom = Math.min(height, (guideRect.bottom - top) / scale);
+  const cropWidth = right - x;
+  const cropHeight = bottom - y;
+  if (!(cropWidth > 0 && cropHeight > 0)) throw new Error('Camera guide is outside the video');
+  // Bound the transferred image; the worker handles upscaling and enhancement once.
+  const outputScale = Math.min(1, 1600 / Math.max(cropWidth, cropHeight));
+  cameraCanvas.width = Math.max(1, Math.round(cropWidth * outputScale));
+  cameraCanvas.height = Math.max(1, Math.round(cropHeight * outputScale));
+  cameraCanvas.getContext('2d').drawImage(cameraVideo, x, y, cropWidth, cropHeight,
+    0, 0, cameraCanvas.width, cameraCanvas.height);
+  return cameraCanvas;
 }
 
-function enhanceCanvasForOCR(sourceCanvas) {
-  const scale = 2;
-  const tmp = getOffscreenCanvas(sourceCanvas.width * scale, sourceCanvas.height * scale);
-  const ctx = tmp.getContext('2d');
-  ctx.clearRect(0, 0, tmp.width, tmp.height);
-  ctx.drawImage(sourceCanvas, 0, 0, tmp.width, tmp.height);
-
-  const img = ctx.getImageData(0, 0, tmp.width, tmp.height);
-  const data = img.data;
-  const brightnessThreshold = 210;
-
-  // Convert to grayscale with contrast boost in-place
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    let gray = 0.299 * r + 0.587 * g + 0.114 * b;
-    gray = Math.max(0, Math.min(255, (gray - 128) * 1.6 + 128));
-    const v = gray > brightnessThreshold ? 255 : Math.max(0, gray - 45);
-    data[i] = v;
-    data[i + 1] = v;
-    data[i + 2] = v;
-    data[i + 3] = 255;
-  }
-
-  ctx.putImageData(img, 0, 0);
-  return tmp;
-}
-
-// OCR worker integration: run OCR in dedicated Web Worker to avoid blocking main thread
-let ocrWorker = null;
-let ocrWorkerReady = null;
-const _pendingOCR = new Map();
 function initOCRWorker() {
-  if (ocrWorker) return;
-  ocrWorker = new Worker('ocr-worker.js');
-  ocrWorkerReady = new Promise((resolve, reject) => {
-    ocrWorker._resolveReady = resolve;
-    ocrWorker._rejectReady = reject;
-  });
+  if (ocrWorker) return ocrWorker;
+  const worker = new Worker('ocr-worker.js');
+  ocrWorker = worker;
+  worker.onmessage = ({ data }) => {
+    if (ocrWorker !== worker) return;
+    const entry = pendingOCR.get(data.id);
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    pendingOCR.delete(data.id);
+    if (data.error) {
+      resetOCRWorker(new Error(data.error));
+      entry.reject(new Error(data.error));
+    } else {
+      entry.resolve(data.result);
+    }
+  };
+  worker.onerror = () => {
+    if (ocrWorker === worker) resetOCRWorker(new Error('Unable to load OCR worker. Please retry.'));
+  };
+  worker.onmessageerror = () => {
+    if (ocrWorker === worker) resetOCRWorker(new Error('Unable to read OCR response. Please retry.'));
+  };
+  return worker;
+}
 
-  ocrWorker.onmessage = (e) => {
-    const data = e.data || {};
-    if (data.type === 'ready') {
-      ocrWorker._resolveReady();
+function runOCROnCanvas(canvas, session, timeoutMs = 60000) {
+  const worker = initOCRWorker();
+  const id = ++nextOCRId;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resetOCRWorker(new Error('Scan timed out. Please retry.')), timeoutMs);
+    pendingOCR.set(id, { resolve, reject, timer });
+    // Transfer pixels when possible; PNG Blob input also works without OffscreenCanvas.
+    const canTransfer = typeof createImageBitmap === 'function' && typeof OffscreenCanvas !== 'undefined';
+    const imagePromise = canTransfer ? Promise.resolve().then(() => createImageBitmap(canvas)) : new Promise((res, rej) => {
+      canvas.toBlob(blob => blob ? res(blob) : rej(new Error('Unable to capture image')), 'image/png');
+    });
+    imagePromise.then(image => {
+      if (!pendingOCR.has(id) || session !== cameraSession) {
+        if (typeof image.close === 'function') image.close();
+        return;
+      }
+      try {
+        worker.postMessage({ type: 'recognize', id, image }, canTransfer ? [image] : []);
+      } catch (error) {
+        if (typeof image.close === 'function') image.close();
+        throw error;
+      }
+    }).catch(error => {
+      if (pendingOCR.has(id)) resetOCRWorker(error);
+    });
+  });
+}
+
+captureBtn.addEventListener('click', async () => {
+  if (captureBtn.disabled) return;
+  if (!cameraVideo.videoWidth || !cameraVideo.videoHeight) {
+    showScanStatus('Camera not ready. Try again.');
+    return;
+  }
+  const session = cameraSession;
+  captureBtn.disabled = true;
+  ocrCandidates.style.display = 'none';
+  showScanStatus('Reading numbers… The first scan may take longer.');
+  try {
+    const result = await runOCROnCanvas(getCaptureCanvas(), session);
+    if (session !== cameraSession) return;
+    const candidates = result?.candidates || [];
+    if (!candidates.length) {
+      showScanStatus('No usable amount found. Try again.');
+      captureBtn.disabled = false;
       return;
     }
-
-    const { id, result, error } = data;
-    const entry = _pendingOCR.get(id);
-    if (!entry) return;
-    _pendingOCR.delete(id);
-    if (error) {
-      entry.reject(new Error(error));
+    const [top, runnerUp] = candidates;
+    // A ranking score is not a confidence percentage. Require both confidence and separation.
+    if (top.confidence >= 90 && top.score >= 120 && (!runnerUp || top.score - runnerUp.score >= 25)) {
+      applyExtractedValue(top.value);
+      showScanStatus('✓ Number detected: ' + formatNumber(top.value), 1200);
     } else {
-      entry.resolve(result);
-    }
-  };
-  ocrWorker.onerror = (err) => {
-    console.error('OCR worker error', err);
-    if (ocrWorker && ocrWorker._rejectReady) ocrWorker._rejectReady(err);
-  };
-
-  // ask worker to initialize in background
-  try { ocrWorker.postMessage({ type: 'init' }); } catch (e) { /* ignore */ }
-}
-
-async function runOCROnCanvas(canvas, timeoutMs = 20000) {
-  initOCRWorker();
-  // wait for worker to be ready (but don't fail immediately)
-  try { await Promise.race([ocrWorkerReady, new Promise(res => setTimeout(res, 2000))]); } catch (e) { /* ignore */ }
-
-  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  return new Promise(async (resolve, reject) => {
-    const timer = setTimeout(() => {
-      _pendingOCR.delete(id);
-      reject(new Error('OCR timeout'));
-    }, timeoutMs);
-
-    _pendingOCR.set(id, {
-      resolve: (res) => { clearTimeout(timer); resolve(res); },
-      reject: (err) => { clearTimeout(timer); reject(err); }
-    });
-
-    try {
-      // create transferable ImageBitmap to send to worker
-      const bitmap = await createImageBitmap(canvas);
-      ocrWorker.postMessage({ type: 'recognize', id, bitmap }, [bitmap]);
-    } catch (err) {
-      _pendingOCR.delete(id);
-      clearTimeout(timer);
-      reject(err);
-    }
-  });
-}
-
-// Capture photo and perform OCR
-captureBtn.addEventListener('click', async function() {
-  try {
-    await loadTesseractIfNeeded();
-  } catch (error) {
-    console.error('OCR library failed to load:', error);
-    ocrStatus.innerHTML = '<span style="color: #ff3b30;">OCR library failed to load. Please try again.</span>';
-    setTimeout(() => {
-      ocrStatus.style.display = 'none';
-      captureBtn.disabled = false;
-    }, 2000);
-    return;
-  }
-
-  if (!cameraVideo.videoWidth || !cameraVideo.videoHeight) {
-    ocrStatus.innerHTML = '<span style="color: #ff3b30;">Camera not ready. Try again.</span>';
-    setTimeout(() => {
-      ocrStatus.style.display = 'none';
-      captureBtn.disabled = false;
-    }, 2000);
-    return;
-  }
-
-  const captureCanvas = getCaptureCanvas();
-  cameraCanvas.width = captureCanvas.width;
-  cameraCanvas.height = captureCanvas.height;
-  const context = cameraCanvas.getContext('2d');
-  context.drawImage(captureCanvas, 0, 0);
-
-  // Show OCR status
-  ocrStatus.style.display = 'flex';
-  captureBtn.disabled = true;
-
-  try {
-    const enhancedCanvas = enhanceCanvasForOCR(captureCanvas);
-    const bestResult = await runOCROnCanvas(enhancedCanvas);
-    console.log('OCR result:', bestResult);
-
-    // bestResult may include a candidates array (from worker)
-    const candidates = (bestResult && bestResult.candidates) || bestResult.candidates || [];
-    const autoAcceptScore = 120; // tunable
-
-    if (candidates && candidates.length > 0) {
-      // If top candidate has a strong score, auto-accept
-      const top = candidates[0];
-      if (top.score >= autoAcceptScore) {
-        applyExtractedValue(top.value);
-        ocrStatus.innerHTML = '<span style="color: #4caf50;">✓ Number detected: ' + formatNumber(top.value) + '</span>';
-        setTimeout(() => closeCamera(), 1200);
-      } else {
-        // Show UI choices to user
-        showCandidateOptions(candidates);
-      }
-    } else {
-      // Fallback to text-based extraction
-      const text = bestResult.text || '';
-      const extractedNumber = extractNumbers(text);
-      if (extractedNumber !== null && !isNaN(extractedNumber)) {
-        applyExtractedValue(extractedNumber);
-        ocrStatus.innerHTML = '<span style="color: #4caf50;">✓ Number detected: ' + extractedNumber.toFixed(2) + '</span>';
-        setTimeout(() => closeCamera(), 1200);
-      } else {
-        ocrStatus.innerHTML = '<span style="color: #ff3b30;">No usable amount found. Try again.</span>';
-        setTimeout(() => {
-          ocrStatus.style.display = 'none';
-          captureBtn.disabled = false;
-        }, 2000);
-      }
+      showCandidateOptions(candidates);
     }
   } catch (error) {
-    console.error('OCR Error:', error);
-    ocrStatus.innerHTML = '<span style="color: #ff3b30;">Error reading image. Please try again.</span>';
-    setTimeout(() => {
-      ocrStatus.style.display = 'none';
-      captureBtn.disabled = false;
-    }, 2000);
+    if (session !== cameraSession) return;
+    console.error('OCR error:', error);
+    showScanStatus('Unable to read image. Please retry.');
+    captureBtn.disabled = false;
   }
 });
 
@@ -604,22 +380,15 @@ function formatNumber(n) {
   return Number(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-function applyExtractedValue(val) {
-  const selectedCurrency = currencySelect.value;
-  const precision = getDisplayPrecision(selectedCurrency);
-  secondCurrency.value = Number(val).toFixed(precision);
-  const numeric = parseFloat(secondCurrency.value);
-  if (numeric) {
-    lastEdited = 'second';
-    const converted = convertToTHB(numeric, selectedCurrency);
-    thb.value = converted.toFixed(2);
-    lastEdited = null;
-  }
+function applyExtractedValue(value) {
+  secondCurrency.value = Number(value).toFixed(getDisplayPrecision(currencySelect.value));
+  inputSource = 'second';
+  recalculateInputs();
 }
 
 // Render candidate buttons for user to choose
 function showCandidateOptions(candidates) {
-  const container = document.getElementById('ocr-candidates');
+  const container = ocrCandidates;
   container.innerHTML = '';
   container.style.display = 'flex';
   ocrStatus.style.display = 'none';
@@ -628,12 +397,11 @@ function showCandidateOptions(candidates) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'px-4 py-2 rounded-xl bg-nm-bg text-nm-text border border-white/40 hover:bg-black/5';
-    btn.textContent = `${formatNumber(c.value)}  — confidence ${Math.round(c.score)}`;
+    btn.textContent = `${formatNumber(c.value)}  — confidence ${Math.round(c.confidence)}`;
     btn.addEventListener('click', () => {
       container.style.display = 'none';
       applyExtractedValue(c.value);
-      ocrStatus.innerHTML = '<span style="color: #4caf50;">✓ Selected: ' + formatNumber(c.value) + '</span>';
-      setTimeout(() => closeCamera(), 900);
+      showScanStatus('✓ Selected: ' + formatNumber(c.value), 900);
     });
     container.appendChild(btn);
   });

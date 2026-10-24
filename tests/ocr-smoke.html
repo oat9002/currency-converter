@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>OCR smoke test</title>
+<h1>OCR smoke test</h1>
+<p id="status" role="status">Running real Tesseract recognition…</p>
+<canvas id="receipt" width="900" height="200"></canvas>
+<pre id="result"></pre>
+<script>
+(async () => {
+  const canvas = document.getElementById('receipt');
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'white';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = 'black';
+  ctx.font = 'bold 64px sans-serif';
+  ctx.fillText('TOTAL 1,250.00', 40, 120);
+  const worker = new Worker('../ocr-worker.js');
+  const timer = setTimeout(() => {
+    document.getElementById('status').textContent = 'FAIL: recognition timed out';
+    worker.terminate();
+  }, 60000);
+  const finish = (passed, result) => {
+    clearTimeout(timer);
+    document.getElementById('status').textContent = passed ? 'PASS: recognized 1,250.00' : 'FAIL: unexpected OCR result';
+    document.getElementById('result').textContent = JSON.stringify(result, null, 2);
+    worker.terminate();
+  };
+  worker.onmessage = ({ data }) => finish(data.result?.candidates?.[0]?.value === 1250, data);
+  worker.onerror = event => finish(false, { error: event.message });
+  const canTransfer = typeof createImageBitmap === 'function' && typeof OffscreenCanvas !== 'undefined';
+  const image = canTransfer ? await createImageBitmap(canvas) : await new Promise(resolve => canvas.toBlob(resolve));
+  worker.postMessage({ type: 'recognize', id: 1, image }, canTransfer ? [image] : []);
+})().catch(error => { document.getElementById('status').textContent = 'FAIL: ' + error.message; });
+</script>
+</html>

@@ -4,6 +4,7 @@
   "private": true,
   "description": "Minimal currency converter for Firebase Hosting.",
   "scripts": {
+    "test": "node --test tests/*.test.cjs",
     "firebase": "firebase",
     "build": "npx @tailwindcss/cli -i ./style.css -o ./tailwind.css --minify",
     "watch": "npx @tailwindcss/cli -i ./style.css -o ./tailwind.css --watch",

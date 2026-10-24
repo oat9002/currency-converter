@@ -1,245 +1,142 @@
-importScripts('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+// Tesseract is loaded only in this worker, on the first scan.
+importScripts('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
 
-// Worker uses a persistent Tesseract worker (createWorker) and performs preprocessing here.
-let _workerInstance = null;
-let _initialized = false;
+let workerPromise = null;
+let processingCanvas = null;
 
-async function ensureWorkerInitialized() {
-  if (_initialized && _workerInstance) return;
-  _workerInstance = Tesseract.createWorker({
-    logger: m => {
-      // forward logs to main thread if needed
-      // postMessage({ type: 'log', payload: m });
-    }
-  });
-
-  await _workerInstance.load();
-  await _workerInstance.loadLanguage('eng+tha');
-  await _workerInstance.initialize('eng+tha');
-  // set params for digits and common characters
-  await _workerInstance.setParameters({ tessedit_char_whitelist: '0123456789.,:()฿/ -' });
-  _initialized = true;
-  postMessage({ type: 'ready' });
+function ensureWorkerInitialized() {
+  if (!workerPromise) {
+    workerPromise = (async () => {
+      // v5 creates, loads, and initializes the engine in one asynchronous call.
+      const worker = await Tesseract.createWorker('eng+tha', 1);
+      // Keep receipt labels: a digit-only whitelist prevented total-keyword scoring.
+      await worker.setParameters({ preserve_interword_spaces: '1' });
+      return worker;
+    })();
+  }
+  return workerPromise;
 }
 
 function preprocessBitmapToCanvas(bitmap) {
-  // create an offscreen canvas to manipulate (OffscreenCanvas in worker if available)
-  const scale = 2;
-  let canvas;
-  let ctx;
-  try {
-    if (typeof OffscreenCanvas !== 'undefined') {
-      canvas = new OffscreenCanvas(bitmap.width * scale, bitmap.height * scale);
-      ctx = canvas.getContext('2d');
-    } else {
-      // fallback (shouldn't typically run in worker)
-      canvas = self.document ? self.document.createElement('canvas') : null;
-      if (!canvas) throw new Error('No canvas available in worker');
-      canvas.width = bitmap.width * scale;
-      canvas.height = bitmap.height * scale;
-      ctx = canvas.getContext('2d');
-    }
-  } catch (err) {
-    throw err;
+  const scale = Math.min(2, 2048 / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  if (!processingCanvas) processingCanvas = new OffscreenCanvas(width, height);
+  if (processingCanvas.width !== width) processingCanvas.width = width;
+  if (processingCanvas.height !== height) processingCanvas.height = height;
+  const ctx = processingCanvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  const image = ctx.getImageData(0, 0, width, height);
+  const pixels = image.data;
+  // One bounded grayscale/contrast pass; retain antialiased edges for small text.
+  for (let i = 0; i < pixels.length; i += 4) {
+    const gray = pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114;
+    const value = Math.max(0, Math.min(255, (gray - 128) * 1.3 + 128));
+    pixels[i] = pixels[i + 1] = pixels[i + 2] = value;
+    pixels[i + 3] = 255;
   }
-
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-
-  // simple grayscale + contrast boost + thresholding
-  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = img.data;
-  const brightnessThreshold = 210;
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i], g = data[i+1], b = data[i+2];
-    let gray = 0.299 * r + 0.587 * g + 0.114 * b;
-    gray = Math.max(0, Math.min(255, (gray - 128) * 1.6 + 128));
-    const v = gray > brightnessThreshold ? 255 : Math.max(0, gray - 45);
-    data[i] = data[i+1] = data[i+2] = v;
-    data[i+3] = 255;
-  }
-  ctx.putImageData(img, 0, 0);
-
-  return canvas;
+  ctx.putImageData(image, 0, 0);
+  return processingCanvas;
 }
-
-// scoring helper
-const KEYWORDS = [
-  'total', 'amount', 'amt', 'due', 'payable', 'grand total', 'subtotal', 'balance', 'total due',
-  'ยอดรวม', 'ยอดชำระ', 'รวม', 'รวมทั้งสิ้น', 'จำนวนเงิน', 'ชำระ', 'เงิน',
-  '合計', '總計', '支付', '金额'
-];
 
 function normalizeKeywordText(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\u0e00-\u0e7f\u4e00-\u9fff]/g, '')
-    .trim();
+  return String(value || '').toLowerCase().replace(/[^a-z0-9\u0e00-\u0e7f\u4e00-\u9fff]/g, '');
 }
 
-function extractCandidateScore(word, keywordWords) {
-  const text = normalizeKeywordText(word.text);
-  if (!text) return 0;
+const KEYWORDS = ['total', 'amount', 'amt', 'due', 'payable', 'balance',
+  'ยอดรวม', 'ยอดชำระ', 'รวมทั้งสิ้น', 'จำนวนเงิน', '合計', '總計', '支付', '金额']
+  .map(normalizeKeywordText);
 
-  let score = 0;
-  if (word.confidence) score += Number(word.confidence) * 0.8;
-  if (word.bbox) {
-    const { x0, y0, x1, y1 } = word.bbox;
-    const width = Math.max(1, x1 - x0);
-    const height = Math.max(1, y1 - y0);
-    score += Math.min(30, width * 0.1 + height * 0.4);
-  }
-
-  // prefer a word near keyword area or near the lower half of the image
-  // if the text is numeric-like, we can rank it using OCR confidence and size
-  const hasDigit = /\d/.test(text);
-  if (hasDigit) score += 12;
-  const isKeywordLike = keywordWords.some((kw) => text.includes(kw) || kw.includes(text));
-  if (isKeywordLike) score += 50;
-
-  return score;
+function normalizeDigits(value) {
+  return String(value || '').replace(/[๐-๙]/g, digit => '๐๑๒๓๔๕๖๗๘๙'.indexOf(digit))
+    .replace(/[\u200B-\u200D\uFEFF]/g, '');
 }
 
 function parseMoneyCandidateLocal(raw) {
-  if (!raw) return null;
-  let pattern = String(raw).trim();
-  if (!pattern) return null;
-  pattern = pattern.replace(/\s+/g, '');
-  pattern = pattern.replace(/[^\d.,]/g, '');
-  if (!pattern) return null;
-
-  if (pattern.includes(',') && pattern.includes('.')) {
-    const lastComma = pattern.lastIndexOf(',');
-    const lastDot = pattern.lastIndexOf('.');
-    const decimalSep = lastComma > lastDot ? ',' : '.';
-    const thousandSep = decimalSep === ',' ? '.' : ',';
-    pattern = pattern.replace(new RegExp(`\\${thousandSep}`, 'g'), '');
-    pattern = pattern.replace(decimalSep, '.');
-  } else if (pattern.includes(',')) {
-    const parts = pattern.split(',');
-    if (parts.length > 1 && parts[parts.length - 1].length <= 2) {
-      pattern = pattern.replace(/,/g, '.');
-    } else {
-      pattern = pattern.replace(/,/g, '');
-    }
-  } else if (pattern.includes('.')) {
-    const parts = pattern.split('.');
-    if (parts.length > 1 && parts[parts.length - 1].length > 2) {
-      pattern = pattern.replace(/\./g, '');
-    }
+  let pattern = normalizeDigits(raw).trim()
+    .replace(/^(?:THB|IDR|PHP|JPY|MYR|CNY|KRW|SGD|HKD|VND)\s*/i, '')
+    .replace(/\s*(?:THB|IDR|PHP|JPY|MYR|CNY|KRW|SGD|HKD|VND)$/i, '')
+    .replace(/^[฿$€£¥₫₱₩]+|[฿$€£¥₫₱₩]+$/g, '').trim();
+  // Validate the entire token: dates, IDs, and malformed separator groups aren't amounts.
+  if (!/^\d+(?:[.,]\d{1,2})?$/.test(pattern) &&
+      !/^\d{1,3}(?:([.,\s])\d{3})(?:\1\d{3})*(?:[.,]\d{1,2})?$/.test(pattern)) return null;
+  pattern = pattern.replace(/\s/g, '');
+  const decimal = pattern.match(/[.,]\d{1,2}$/);
+  if (decimal) {
+    if (pattern.slice(0, -decimal[0].length).includes(decimal[0][0])) return null;
+    pattern = pattern.slice(0, -decimal[0].length).replace(/[.,]/g, '') + '.' + decimal[0].slice(1);
+  } else {
+    pattern = pattern.replace(/[.,]/g, '');
   }
-
-  const value = Number.parseFloat(pattern);
-  if (!Number.isFinite(value)) return null;
-  if (value <= 0 || value > 10000000) return null;
-  return value;
+  const value = Number(pattern);
+  return Number.isFinite(value) && value > 0 && value <= 1e12 ? value : null;
 }
 
-function scoreResult(data) {
-  const txt = (data && data.text) ? String(data.text) : '';
-  const cleaned = (txt || '').replace(/[\u200B-\u200D\uFEFF]/g, '');
-  const digits = (cleaned.match(/\d/g) || []).length;
-  const avgConf = data.words && data.words.length
-    ? data.words.reduce((s, w) => s + (Number(w.confidence) || 0), 0) / data.words.length
-    : 0;
-
-  const keywordWords = (data.words || [])
-    .filter(w => {
-      const norm = normalizeKeywordText(w.text);
-      return KEYWORDS.some(kw => norm.includes(normalizeKeywordText(kw)) || normalizeKeywordText(kw).includes(norm));
-    });
-
-  const candidates = [];
-
-  for (const word of data.words || []) {
-    const rawText = String(word.text || '');
-    const norm = normalizeKeywordText(rawText);
-    if (!norm || !/\d/.test(norm)) continue;
-    const candidateText = rawText.replace(/[^\d.,]/g, '');
-    const value = parseMoneyCandidateLocal(candidateText);
+function scoreResult(data = {}) {
+  const text = normalizeDigits(data.text);
+  const words = data.words || [];
+  const keywordWords = words.filter(word => {
+    const normalized = normalizeKeywordText(word.text);
+    return normalized && KEYWORDS.some(keyword => normalized.includes(keyword));
+  });
+  const byValue = new Map();
+  for (const word of words) {
+    const value = parseMoneyCandidateLocal(word.text);
     if (value === null) continue;
-
-    let score = Number(word.confidence || 0) * 1.2;
+    const confidence = Math.max(0, Math.min(100, Number(word.confidence) || 0));
+    let score = confidence * 1.2;
     if (word.bbox) {
       const { x0, y0, x1, y1 } = word.bbox;
-      const width = Math.max(1, x1 - x0);
-      const height = Math.max(1, y1 - y0);
-      score += width * 0.12 + height * 0.25;
-    }
-
-    if (keywordWords.length) {
-      let nearestDistance = Infinity;
-      for (const kw of keywordWords) {
-        if (!kw.bbox || !word.bbox) continue;
-        const xCenter = (word.bbox.x0 + word.bbox.x1) / 2;
-        const yCenter = (word.bbox.y0 + word.bbox.y1) / 2;
-        const kxCenter = (kw.bbox.x0 + kw.bbox.x1) / 2;
-        const kyCenter = (kw.bbox.y0 + kw.bbox.y1) / 2;
-        const distance = Math.hypot(xCenter - kxCenter, yCenter - kyCenter);
-        nearestDistance = Math.min(nearestDistance, distance);
-      }
-      if (Number.isFinite(nearestDistance)) {
-        score += Math.max(0, 80 - nearestDistance * 0.08);
+      // Cap size bonuses so large low-confidence digits cannot dominate.
+      score += Math.min(30, Math.max(0, x1 - x0) * 0.12 + Math.max(0, y1 - y0) * 0.25);
+      for (const keyword of keywordWords) {
+        if (!keyword.bbox) continue;
+        const box = keyword.bbox;
+        const height = Math.max(1, y1 - y0, box.y1 - box.y0);
+        const distanceY = Math.abs((y0 + y1 - box.y0 - box.y1) / 2);
+        // Prefer an amount on the same line as "total", independent of image scale.
+        if (distanceY <= height && x0 >= box.x0) {
+          score += 50;
+          break;
+        }
       }
     }
-
-    if (candidateText.includes(',') || candidateText.includes('.')) score += 15;
-    if (candidateText.length >= 3 && candidateText.length <= 8) score += 10;
-
-    candidates.push({ text: candidateText, value, bbox: word.bbox || null, confidence: Number(word.confidence||0), score });
+    if (/[.,]/.test(word.text)) score += 15;
+    const candidate = { value, text: word.text, confidence, score };
+    if (!byValue.has(value) || byValue.get(value).score < score) byValue.set(value, candidate);
   }
-
-  candidates.sort((a,b)=>b.score - a.score);
-  const bestCandidate = candidates.length ? candidates[0].text : null;
-  const bestCandidateScore = candidates.length ? candidates[0].score : -Infinity;
-
-  const score = digits * 4 + avgConf * 0.6 + (bestCandidate ? bestCandidateScore * 0.25 : 0);
-  return {
-    score,
-    cleaned,
-    digits,
-    avgConf,
-    bestCandidate,
-    candidates
-  };
+  // Some engine outputs have only plain text. Always ask the user to confirm these.
+  if (!words.length) {
+    const withoutDates = text.replace(/\d+(?:[/:\-]\d+)+/g, ' ');
+    for (const match of withoutDates.matchAll(/(?:\d{1,3}(?:[, .]\d{3})+|\d+)(?:[.,]\d{1,2})?/g)) {
+      const value = parseMoneyCandidateLocal(match[0]);
+      if (value !== null) byValue.set(value, { value, text: match[0], confidence: 0, score: 0 });
+    }
+  }
+  const candidates = [...byValue.values()].sort((a, b) => b.score - a.score);
+  return { text, candidates, score: candidates[0]?.score ?? -1 };
 }
 
-self.onmessage = async (e) => {
-  const msg = e.data || {};
+self.onmessage = async ({ data: message }) => {
+  if (message?.type !== 'recognize' || !message.image) return;
+  const { id, image } = message;
   try {
-    if (msg.type === 'init') {
-      await ensureWorkerInitialized();
-      return;
+    const worker = await ensureWorkerInitialized();
+    const isBitmap = typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap;
+    const input = isBitmap ? preprocessBitmapToCanvas(image) : image;
+    let best = { score: -1, text: '', candidates: [] };
+    for (const psm of [6, 11]) {
+      await worker.setParameters({ tessedit_pageseg_mode: String(psm) });
+      const { data } = await worker.recognize(input, {}, { text: true, blocks: true, hocr: false, tsv: false });
+      const result = scoreResult(data);
+      if (result.score > best.score) best = result;
+      const [top, runnerUp] = best.candidates;
+      if (top?.confidence >= 90 && top.score >= 120 && (!runnerUp || top.score - runnerUp.score >= 25)) break;
     }
-
-    if (msg.type === 'recognize' && msg.bitmap) {
-      const { id, bitmap } = msg;
-      try {
-        await ensureWorkerInitialized();
-        const canvas = preprocessBitmapToCanvas(bitmap);
-
-        const psmCandidates = [6, 11];
-        let best = { score: -Infinity, text: '', psm: null, candidate: null };
-
-        for (const psm of psmCandidates) {
-          try {
-            const { data } = await _workerInstance.recognize(canvas, { psm });
-            const { score, cleaned, digits, avgConf, bestCandidate } = scoreResult(data);
-            if (score > best.score) best = { score, text: cleaned, psm, candidate: bestCandidate || cleaned };
-            if (digits >= 3 && avgConf >= 80) break;
-          } catch (innerErr) {
-            console.warn('worker psm failed', psm, innerErr);
-          }
-        }
-
-        postMessage({ id, result: best });
-      } catch (err) {
-        postMessage({ id, error: String(err) });
-      } finally {
-        try { if (bitmap && typeof bitmap.close === 'function') bitmap.close(); } catch (e) {}
-      }
-    }
-  } catch (err) {
-    if (msg && msg.id) postMessage({ id: msg.id, error: String(err) });
-    else postMessage({ error: String(err) });
+    postMessage({ id, result: best });
+  } catch (error) {
+    postMessage({ id, error: error.message || String(error) });
+  } finally {
+    if (typeof image.close === 'function') image.close();
   }
 };

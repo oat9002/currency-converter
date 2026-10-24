@@ -1,5 +1,5 @@
 // Keep this stable across service-worker restarts; install-time globals are not persisted.
-const CACHE_NAME = 'currency-converter-v1.0.23';
+const CACHE_NAME = 'currency-converter-v1.0.24';
 
 const PRECACHE_URLS = [
   '/',

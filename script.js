@@ -608,7 +608,11 @@ if (document.readyState === 'loading') {
 
 // Service Worker update detection
 if ('serviceWorker' in navigator) {
+  const upgradingExistingPage = Boolean(navigator.serviceWorker.controller);
+  let reloadingForUpdate = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!upgradingExistingPage || reloadingForUpdate) return;
+    reloadingForUpdate = true;
     console.log('New service worker activated - refreshing page');
     window.location.reload();
   });

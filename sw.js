@@ -1,5 +1,5 @@
 // Keep this stable across service-worker restarts; install-time globals are not persisted.
-const CACHE_NAME = 'currency-converter-v1.0.19';
+const CACHE_NAME = 'currency-converter-v1.0.21';
 
 const PRECACHE_URLS = [
   '/',
@@ -56,20 +56,9 @@ self.addEventListener('fetch', event => {
   const isApiRequest = requestUrl.hostname.includes('currency-api.pages.dev');
   const isCrossOriginAsset = requestUrl.hostname.includes('cdn.jsdelivr.net') || requestUrl.hostname.includes('fonts.googleapis.com') || requestUrl.hostname.includes('fonts.gstatic.com');
 
-  if (isApiRequest) {
-    event.respondWith(
-      fetch(event.request)
-        .then(networkResponse => {
-          if (networkResponse && networkResponse.ok) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
-          }
-          return networkResponse;
-        })
-        .catch(() => caches.match(event.request))
-    );
-    return;
-  }
+  // The page owns dated rate caching. A service-worker fallback could make old
+  // JSON look like a successful network refresh and reset its apparent age.
+  if (isApiRequest) return;
 
   event.respondWith(
     caches.match(event.request).then(cachedResponse => {

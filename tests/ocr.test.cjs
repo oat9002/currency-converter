@@ -18,7 +18,7 @@ test('money parser supports grouping, both decimal conventions, Thai digits, and
   for (const [raw, expected] of [
     ['1,234.56', 1234.56], ['1.234,56', 1234.56], ['1 234 567,89', 1234567.89],
     ['๑,๒๓๔.๕๐', 1234.5], ['₫250.000.000', 250000000], ['75025 VND', 75025],
-    ['0.50', 0.5], ['1234', 1234]
+    ['0.50', 0.5], ['1234', 1234], ['１，２５０．５０', 1250.5]
   ]) assert.equal(context.parseMoneyCandidateLocal(raw), expected, raw);
 });
 
@@ -113,4 +113,60 @@ test('initialization failure is reported and transferred image is closed', async
   assert.equal(messages[0].id, 7);
   assert.match(messages[0].error, /offline/);
   assert.equal(closed, true);
+});
+
+test('every currency maps to the intended receipt OCR model', () => {
+  const { context } = loadWorker();
+  const expected = { thb: 'eng+tha', idr: 'eng+ind', php: 'eng+fil', jpy: 'eng+jpn', myr: 'eng+msa',
+    cny: 'eng+chi_sim', krw: 'eng+kor', sgd: 'eng', hkd: 'eng+chi_tra', vnd: 'eng+vie' };
+  for (const [currency, models] of Object.entries(expected)) assert.equal(context.getOCRLanguages(currency), models);
+  assert.throws(() => context.getOCRLanguages('unsupported'), /Unsupported receipt currency/);
+});
+
+test('models load lazily, reuse the engine, and reinitialize when the currency changes', async () => {
+  const created = [];
+  const switched = [];
+  const { context } = loadWorker({ Tesseract: { async createWorker(models) {
+    created.push(models);
+    return { async setParameters() {}, async reinitialize(models) { switched.push(models); },
+      async recognize() { return { data: { words: [{ text: '100.00', confidence: 99 }] } }; } };
+  } } });
+  assert.equal(created.length, 0);
+  for (const currency of ['jpy', 'jpy', 'krw', 'sgd', 'jpy']) {
+    await context.self.onmessage({ data: { type: 'recognize', currency, id: currency, image: {} } });
+  }
+  assert.deepEqual(created, ['eng+jpn']);
+  assert.deepEqual(switched, ['eng+kor', 'eng', 'eng+jpn']);
+});
+
+test('concurrent scan messages cannot switch models during an active recognition', async () => {
+  let activeModels;
+  const used = [];
+  const { context } = loadWorker({ Tesseract: { async createWorker(models) {
+    activeModels = models;
+    return { async setParameters() {}, async reinitialize(models) { activeModels = models; },
+      async recognize() {
+        const startingModels = activeModels;
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(activeModels, startingModels);
+        used.push(activeModels);
+        return { data: { words: [{ text: '100.00', confidence: 99 }] } };
+      } };
+  } } });
+  await Promise.all(['jpy', 'vnd', 'hkd'].map(currency => context.self.onmessage({
+    data: { type: 'recognize', currency, id: currency, image: {} }
+  })));
+  assert.deepEqual(used, ['eng+jpn', 'eng+vie', 'eng+chi_tra']);
+});
+
+test('receipt keywords in Korean and Vietnamese boost the matching amount', () => {
+  const { context } = loadWorker();
+  for (const label of ['합계', 'Tổng cộng', 'Tong cong']) {
+    const result = context.scoreResult({ words: [
+      { text: label, bbox: { x0: 0, y0: 50, x1: 60, y1: 70 } },
+      { text: '999', confidence: 90, bbox: { x0: 100, y0: 0, x1: 160, y1: 20 } },
+      { text: '100', confidence: 90, bbox: { x0: 100, y0: 50, x1: 160, y1: 70 } }
+    ] });
+    assert.equal(result.candidates[0].value, 100, label);
+  }
 });

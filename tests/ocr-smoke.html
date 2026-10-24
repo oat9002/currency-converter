@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<title>OCR smoke test</title>
-<h1>OCR smoke test</h1>
+<title>Multilingual OCR smoke test</title>
+<h1>Multilingual OCR smoke test</h1>
 <p id="status" role="status">Running real Tesseract recognition…</p>
 <canvas id="receipt" width="900" height="200"></canvas>
 <pre id="result"></pre>
@@ -10,27 +10,37 @@
 (async () => {
   const canvas = document.getElementById('receipt');
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = 'white';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = 'black';
-  ctx.font = 'bold 64px sans-serif';
-  ctx.fillText('TOTAL 1,250.00', 40, 120);
   const worker = new Worker('../ocr-worker.js');
-  const timer = setTimeout(() => {
-    document.getElementById('status').textContent = 'FAIL: recognition timed out';
+  const labels = { thb: 'ยอดรวม', idr: 'JUMLAH', php: 'KABUUAN', jpy: '合計', myr: 'JUMLAH',
+    cny: '合计', krw: '합계', sgd: 'TOTAL', hkd: '總計', vnd: 'Tổng cộng' };
+  const currencies = (new URLSearchParams(location.search).get('currencies') || 'jpy,vnd,hkd').split(',');
+  const results = [];
+  try {
+    for (const currency of currencies) {
+      if (!labels[currency]) throw new Error('Unknown fixture currency');
+      document.getElementById('status').textContent = 'Scanning ' + currency.toUpperCase() + ' receipt…';
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'black';
+      ctx.font = 'bold 64px sans-serif';
+      ctx.fillText(labels[currency] + ' 1,250.00', 40, 120);
+      const canTransfer = typeof createImageBitmap === 'function' && typeof OffscreenCanvas !== 'undefined';
+      const image = canTransfer ? await createImageBitmap(canvas) : await new Promise(resolve => canvas.toBlob(resolve));
+      const data = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Recognition timed out')), 60000);
+        worker.onmessage = ({ data }) => { clearTimeout(timer); resolve(data); };
+        worker.onerror = event => { clearTimeout(timer); reject(new Error(event.message)); };
+        worker.postMessage({ type: 'recognize', id: currency, currency, image }, canTransfer ? [image] : []);
+      });
+      const passed = data.result?.candidates?.[0]?.value === 1250;
+      results.push({ currency, passed, ...data });
+      document.getElementById('result').textContent = JSON.stringify(results, null, 2);
+      if (!passed) throw new Error('Unexpected OCR result for ' + currency);
+    }
+    document.getElementById('status').textContent = 'PASS: recognized 1,250.00 across ' + currencies.join(', ') + ' using one engine';
+  } finally {
     worker.terminate();
-  }, 60000);
-  const finish = (passed, result) => {
-    clearTimeout(timer);
-    document.getElementById('status').textContent = passed ? 'PASS: recognized 1,250.00' : 'FAIL: unexpected OCR result';
-    document.getElementById('result').textContent = JSON.stringify(result, null, 2);
-    worker.terminate();
-  };
-  worker.onmessage = ({ data }) => finish(data.result?.candidates?.[0]?.value === 1250, data);
-  worker.onerror = event => finish(false, { error: event.message });
-  const canTransfer = typeof createImageBitmap === 'function' && typeof OffscreenCanvas !== 'undefined';
-  const image = canTransfer ? await createImageBitmap(canvas) : await new Promise(resolve => canvas.toBlob(resolve));
-  worker.postMessage({ type: 'recognize', id: 1, image }, canTransfer ? [image] : []);
+  }
 })().catch(error => { document.getElementById('status').textContent = 'FAIL: ' + error.message; });
 </script>
 </html>

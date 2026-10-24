@@ -14,15 +14,15 @@ globalThis.CurrencyConverterConfig = {
     vnd: { precision: 0, language: 'vi' }
   },
   languages: {
-    th: { name: 'ไทย', locale: 'th-TH' },
-    id: { name: 'Bahasa Indonesia', locale: 'id-ID' },
-    fil: { name: 'Filipino', locale: 'fil-PH' },
-    ja: { name: '日本語', locale: 'ja-JP' },
-    ms: { name: 'Bahasa Melayu', locale: 'ms-MY' },
-    'zh-Hans': { name: '简体中文', locale: 'zh-CN' },
-    ko: { name: '한국어', locale: 'ko-KR' },
-    en: { name: 'English', locale: 'en-SG' },
-    'zh-Hant': { name: '繁體中文（香港）', locale: 'zh-HK' },
-    vi: { name: 'Tiếng Việt', locale: 'vi-VN' }
+    th: { name: 'ไทย', locale: 'th-TH', ocr: 'tha' },
+    id: { name: 'Bahasa Indonesia', locale: 'id-ID', ocr: 'ind' },
+    fil: { name: 'Filipino', locale: 'fil-PH', ocr: 'fil' },
+    ja: { name: '日本語', locale: 'ja-JP', ocr: 'jpn' },
+    ms: { name: 'Bahasa Melayu', locale: 'ms-MY', ocr: 'msa' },
+    'zh-Hans': { name: '简体中文', locale: 'zh-CN', ocr: 'chi_sim' },
+    ko: { name: '한국어', locale: 'ko-KR', ocr: 'kor' },
+    en: { name: 'English', locale: 'en-SG', ocr: 'eng' },
+    'zh-Hant': { name: '繁體中文（香港）', locale: 'zh-HK', ocr: 'chi_tra' },
+    vi: { name: 'Tiếng Việt', locale: 'vi-VN', ocr: 'vie' }
   }
 };

@@ -20,6 +20,7 @@ test('every currency has a language and every offered language has a complete tr
   }
   for (const language of expectedLanguages) {
     assert.ok(languages[language].name.trim());
+    assert.match(languages[language].ocr, /^[a-z_]+$/, language + ' needs an OCR model');
     assert.doesNotThrow(() => new Intl.NumberFormat(languages[language].locale));
     assert.ok(messages[language], language + ' needs translations');
     assert.deepEqual(Object.keys(messages[language]).sort(), Object.keys(messages.en).sort(), language);

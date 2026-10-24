@@ -16,8 +16,15 @@ const currencyName = secondCurrencyLabel.querySelector('span');
 const thbRateElement = document.getElementById('thb-rate');
 const currencySelect = document.getElementById('currency-select');
 const languageSelect = document.getElementById('language-select');
+const ratesStatus = document.getElementById('rates-status');
 let exchangeRates = normalizeRates();
 let inputSource = 'thb';
+let rateSourceDate = null;
+let rateFetchedAt = null;
+let ratesFromCache = false;
+let ratesLoading = true;
+let ratesRequestFailed = false;
+let rateRequestId = 0;
 
 function normalizeRates(data = {}) {
   return Object.fromEntries(CURRENCY_CODES.map(code => {
@@ -45,27 +52,45 @@ function writeStorageState(state = {}) {
   }
 }
 
-function getCachedRates() {
-  try {
-    const state = readStorageState();
-    const cached = state.rates;
-    const timestamp = Number(state.ratesTimestamp);
-
-    if (cached && timestamp && Date.now() - timestamp < RATES_TTL_MS) {
-      return cached;
-    }
-  } catch (error) {
-    console.warn('Unable to read cached exchange rates:', error);
-  }
-
-  return null;
+function validRateDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const timestamp = Date.parse(value + 'T00:00:00Z');
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value ? value : null;
 }
 
-function saveRatesToCache(ratesData) {
+function getCachedRates() {
+  const state = readStorageState();
+  if (!state.rates || !Object.values(normalizeRates(state.rates)).some(rate => rate !== null)) return null;
+  // Expired rates remain useful offline, but their original age must stay visible.
+  return { rates: state.rates, date: validRateDate(state.ratesDate), timestamp: Number(state.ratesTimestamp) || null };
+}
+
+function saveRatesToCache(ratesData, sourceDate) {
   const state = readStorageState();
   state.rates = ratesData;
+  state.ratesDate = sourceDate;
   state.ratesTimestamp = Date.now();
   writeStorageState(state);
+  return state.ratesTimestamp;
+}
+
+function updateRatesStatus() {
+  const available = getSelectedRate(currencySelect.value) !== null;
+  const parts = [];
+  if (available) {
+    const date = rateSourceDate && new Intl.DateTimeFormat(I18N.locale, {
+      dateStyle: 'medium', timeZone: 'UTC'
+    }).format(new Date(rateSourceDate + 'T00:00:00Z'));
+    parts.push(date ? I18N.t('ratesAsOf', { date }) : I18N.t('ratesDateUnknown'));
+    if (ratesFromCache) parts.push(I18N.t('ratesCached'));
+    const ageFrom = rateSourceDate ? Date.parse(rateSourceDate + 'T00:00:00Z') : rateFetchedAt;
+    if (ageFrom && Date.now() - ageFrom > RATES_TTL_MS) parts.push(I18N.t('ratesStale'));
+  } else {
+    parts.push(I18N.t(ratesLoading ? 'ratesLoading' : 'ratesUnavailable'));
+  }
+  if (navigator.onLine === false) parts.push(I18N.t('ratesOffline'));
+  else if (ratesRequestFailed) parts.push(I18N.t('ratesUpdateFailed'));
+  ratesStatus.textContent = parts.join(' · ');
 }
 
 function getSelectedRate(currency) {
@@ -79,28 +104,44 @@ function applyRates(ratesData) {
 }
 
 async function loadExchangeRates() {
-  const cachedRates = getCachedRates();
-  if (cachedRates) {
-    applyRates(cachedRates);
+  const requestId = ++rateRequestId;
+  ratesLoading = true;
+  ratesRequestFailed = false;
+  const cached = getCachedRates();
+  if (cached) {
+    rateSourceDate = cached.date;
+    rateFetchedAt = cached.timestamp;
+    ratesFromCache = true;
+    applyRates(cached.rates);
   }
+  updateRatesStatus();
 
   try {
-    const response = await fetch(API_URL, { signal: AbortSignal.timeout(10000) });
-    if (!response.ok) {
-      throw new Error(`Request failed with status ${response.status}`);
-    }
-
+    // Rates have one cache: local storage, with the API's source date preserved.
+    const response = await fetch(API_URL, { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
     const data = await response.json();
+    if (requestId !== rateRequestId) return;
     const fetchedRates = normalizeRates(data?.thb);
-
-    if (Object.values(fetchedRates).some(rate => rate !== null)) {
-      saveRatesToCache(fetchedRates);
-      applyRates(fetchedRates);
-    }
+    if (!Object.values(fetchedRates).some(rate => rate !== null)) throw new Error('No usable exchange rates');
+    rateSourceDate = validRateDate(data.date);
+    rateFetchedAt = saveRatesToCache(fetchedRates, rateSourceDate);
+    ratesFromCache = false;
+    applyRates(fetchedRates);
   } catch (error) {
+    if (requestId !== rateRequestId) return;
+    ratesRequestFailed = true;
     console.error('Unable to fetch exchange rates:', error);
+  } finally {
+    if (requestId === rateRequestId) {
+      ratesLoading = false;
+      updateRatesStatus();
+    }
   }
 }
+
+window.addEventListener('offline', updateRatesStatus);
+window.addEventListener('online', loadExchangeRates);
 
 // Load saved currency selection from localStorage
 function loadSavedCurrency() {
@@ -137,6 +178,7 @@ function updateCurrencyDisplay() {
   currencyName.textContent = currencyLabel;
   thbRateElement.textContent = selectedRate ? I18N.t('exchangeRate', { amount: 1, from: 'THB', rate: rateText, to: currencyLabel }) : I18N.t('rateUnavailable');
   secondCurrencyRate.textContent = selectedRate ? I18N.t('exchangeRate', { amount: 1, from: currencyLabel, rate: inverseRateText, to: 'THB' }) : I18N.t('rateUnavailable');
+  updateRatesStatus();
 }
 
 // Conversion functions
@@ -199,6 +241,7 @@ const captureBtn = document.getElementById('capture-btn');
 const ocrStatus = document.getElementById('ocr-status');
 const ocrCandidates = document.getElementById('ocr-candidates');
 let stream = null;
+let cameraActive = false;
 let cameraSession = 0;
 let cameraTimer = null;
 let scanStatus = null;
@@ -208,9 +251,10 @@ let nextOCRId = 0;
 const pendingOCR = new Map();
 
 cameraBtn.addEventListener('click', async () => {
-  if (cameraModal.style.display === 'flex') return;
+  if (cameraModal.open) return;
   const session = ++cameraSession;
-  cameraModal.style.display = 'flex';
+  cameraActive = true;
+  cameraModal.showModal();
   captureBtn.disabled = true;
   try {
     const cameraStream = await navigator.mediaDevices.getUserMedia({
@@ -241,13 +285,14 @@ function resetOCRWorker(error = new Error('Scan cancelled')) {
   pendingOCR.clear();
 }
 
-function closeCamera() {
+function cleanupCamera() {
+  cameraActive = false;
+  delete cameraModal.dataset.mode;
   ++cameraSession;
   clearTimeout(cameraTimer);
   if (stream) stream.getTracks().forEach(track => track.stop());
   stream = null;
   cameraVideo.srcObject = null;
-  cameraModal.style.display = 'none';
   ocrStatus.style.display = 'none';
   ocrCandidates.style.display = 'none';
   ocrCandidates.replaceChildren();
@@ -257,6 +302,19 @@ function closeCamera() {
   if (pendingOCR.size) resetOCRWorker();
   captureBtn.disabled = false;
 }
+
+function closeCamera() {
+  cleanupCamera();
+  if (cameraModal.open) cameraModal.close();
+}
+
+cameraModal.addEventListener('cancel', event => {
+  event.preventDefault();
+  closeCamera();
+});
+cameraModal.addEventListener('close', () => {
+  if (!cameraModal.open && cameraActive) cleanupCamera();
+});
 
 closeCameraBtn.addEventListener('click', closeCamera);
 stopCameraBtn.addEventListener('click', closeCamera);
@@ -330,6 +388,7 @@ function initOCRWorker() {
 function runOCROnCanvas(canvas, session, timeoutMs = 60000) {
   const worker = initOCRWorker();
   const id = ++nextOCRId;
+  const currency = currencySelect.value;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => resetOCRWorker(new Error('Scan timed out. Please retry.')), timeoutMs);
     pendingOCR.set(id, { resolve, reject, timer });
@@ -344,7 +403,7 @@ function runOCROnCanvas(canvas, session, timeoutMs = 60000) {
         return;
       }
       try {
-        worker.postMessage({ type: 'recognize', id, image }, canTransfer ? [image] : []);
+        worker.postMessage({ type: 'recognize', id, image, currency }, canTransfer ? [image] : []);
       } catch (error) {
         if (typeof image.close === 'function') image.close();
         throw error;
@@ -403,9 +462,10 @@ function applyExtractedValue(value) {
 // Render candidate buttons for user to choose
 function showCandidateOptions(candidates) {
   candidateChoices = candidates;
+  cameraModal.dataset.mode = 'choosing';
   const container = ocrCandidates;
   container.innerHTML = '';
-  container.style.display = 'flex';
+  container.style.display = 'grid';
   ocrStatus.style.display = 'none';
 
   const prompt = document.createElement('p');
@@ -413,10 +473,10 @@ function showCandidateOptions(candidates) {
   prompt.textContent = I18N.t('chooseAmount');
   container.appendChild(prompt);
 
-  candidates.slice(0, 3).forEach(c => {
+  candidates.forEach(c => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'px-4 py-2 rounded-xl bg-nm-bg text-nm-text border border-white/40 hover:bg-black/5';
+    btn.className = 'ocr-choice px-4 py-2 rounded-xl bg-nm-bg text-nm-text border border-white/40 hover:bg-black/5';
     btn.textContent = formatNumber(c.value);
     btn.addEventListener('click', () => {
       container.style.display = 'none';
@@ -428,9 +488,10 @@ function showCandidateOptions(candidates) {
 
   const retry = document.createElement('button');
   retry.type = 'button';
-  retry.className = 'px-4 py-2 rounded-xl bg-nm-bg text-red-600 border border-white/40 hover:bg-black/5';
+  retry.className = 'ocr-retry px-4 py-2 rounded-xl bg-nm-bg text-red-600 border border-white/40 hover:bg-black/5';
   retry.textContent = I18N.t('retry');
   retry.addEventListener('click', () => {
+    delete cameraModal.dataset.mode;
     container.style.display = 'none';
     ocrStatus.style.display = 'none';
     captureBtn.disabled = false;
@@ -454,7 +515,7 @@ function refreshLanguage() {
   if (scanStatus && ocrStatus.style.display !== 'none') {
     ocrStatus.textContent = I18N.t(scanStatus.key, scanStatus.params);
   }
-  if (ocrCandidates.style.display === 'flex') showCandidateOptions(candidateChoices);
+  if (ocrCandidates.style.display === 'grid') showCandidateOptions(candidateChoices);
 }
 
 languageSelect.replaceChildren(...I18N.supportedLanguages.map(code => {

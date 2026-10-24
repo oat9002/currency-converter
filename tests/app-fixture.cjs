@@ -4,10 +4,13 @@ const vm = require('node:vm');
 function loadApp(overrides = {}, initialState = { selectedCurrency: 'vnd' }) {
   const elements = new Map();
   const workers = [];
+  const windowListeners = {};
   let state = { ...initialState };
   function element(id) {
     if (!elements.has(id)) elements.set(id, {
-      value: id === 'currency-select' ? 'idr' : '', style: {}, children: [], listeners: {},
+      value: id === 'currency-select' ? 'idr' : '', style: {}, dataset: {}, children: [], listeners: {}, open: false,
+      showModal() { this.open = true; },
+      close() { this.open = false; this.listeners.close?.(); },
       querySelector() { return element(id + '-span'); },
       addEventListener(type, callback) { this.listeners[type] = callback; },
       replaceChildren(...children) { this.children = children; if (id.endsWith('-select')) this.value = children[0]?.value || ''; },
@@ -31,14 +34,14 @@ function loadApp(overrides = {}, initialState = { selectedCurrency: 'vnd' }) {
       querySelector: () => element('meta-description'),
       querySelectorAll: () => [],
       createElement: () => element('created-' + Math.random()) },
-    window: { addEventListener() {} }, navigator: { languages: ['en-SG'] }, alert() {},
+    window: { addEventListener(type, listener) { windowListeners[type] = listener; } }, navigator: { languages: ['en-SG'], onLine: true }, alert() {},
     localStorage: { getItem: () => JSON.stringify(state), setItem: (_, raw) => { state = JSON.parse(raw); } },
     // Keep startup fetching pending; tests supply rates deliberately.
     fetch: () => new Promise(() => {}), ...overrides
   });
   for (const file of ['app-config.js', 'translations.js', 'i18n.js']) vm.runInContext(fs.readFileSync(file, 'utf8'), context);
   vm.runInContext(fs.readFileSync('script.js', 'utf8').split('// Theme toggle functionality')[0], context);
-  return { context, element, workers, state: () => state };
+  return { context, element, workers, windowListeners, state: () => state };
 }
 
 module.exports = { loadApp };

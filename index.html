@@ -47,6 +47,7 @@
           <option value="idr">IDR</option>
         </select>
       </div>
+      <p id="rates-status" role="status" class="text-xs text-nm-muted"></p>
       <button id="camera-btn" class="flex items-center justify-center gap-2 px-6 py-3 bg-nm-bg text-blue-600 dark:text-blue-400 border border-white/60 dark:border-white/5 rounded-2xl text-base font-semibold cursor-pointer shadow-nm-btn active:shadow-nm-btn-active transition-all duration-300 mb-2 w-full select-none" type="button" data-i18n-aria-label="openCamera" aria-label="Open camera">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
@@ -78,14 +79,14 @@
   </div>
   
   <!-- Camera Modal -->
-  <div id="camera-modal" class="hidden fixed inset-0 w-full h-full backdrop-blur-md bg-black/60 z-[1000] items-center justify-center flex-col px-4" style="display: none;">
-    <div class="w-full max-w-[480px] max-h-[90vh] flex flex-col bg-nm-bg rounded-[32px] overflow-y-auto shadow-nm-flat border border-white/80 dark:border-white/5">
-      <div class="flex justify-between items-center p-5 border-b border-white/20 dark:border-white/5 text-nm-text">
-        <h2 data-i18n="cameraTitle" class="m-0 text-lg font-bold">Scan an amount</h2>
-        <button id="close-camera" class="bg-transparent border-none text-nm-text text-2xl cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5" data-i18n-aria-label="closeCamera" aria-label="Close camera">×</button>
+  <dialog id="camera-modal" class="camera-dialog" aria-labelledby="camera-title">
+    <div class="camera-panel w-full flex flex-col bg-nm-bg rounded-[32px] overflow-y-auto shadow-nm-flat border border-white/80 dark:border-white/5">
+      <div class="camera-header flex justify-between items-center p-5 border-b border-white/20 dark:border-white/5 text-nm-text">
+        <h2 id="camera-title" data-i18n="cameraTitle" class="m-0 text-lg font-bold">Scan an amount</h2>
+        <button id="close-camera" type="button" autofocus class="bg-transparent border-none text-nm-text text-2xl cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5" data-i18n-aria-label="closeCamera" aria-label="Close camera">×</button>
       </div>
-      <div class="p-4 flex flex-col gap-4">
-        <div class="relative rounded-2xl overflow-hidden border border-white/60 dark:border-white/5 shadow-nm-sunken bg-black">
+      <div class="camera-body p-4 flex flex-col gap-4">
+        <div class="camera-preview relative rounded-2xl overflow-hidden border border-white/60 dark:border-white/5 shadow-nm-sunken bg-black">
           <video id="camera-video" autoplay playsinline class="w-full max-h-[50vh] object-contain bg-black"></video>
           <div id="camera-guide" class="pointer-events-none absolute inset-x-[12%] top-[18%] h-[38%] border-2 border-blue-400/80 rounded-2xl" style="box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);"></div>
           <canvas id="camera-canvas" style="display: none;"></canvas>
@@ -98,12 +99,12 @@
           <!-- Candidate buttons will be injected here -->
         </div>
       </div>
-      <div class="flex flex-wrap gap-4 p-5 justify-center border-t border-white/20 dark:border-white/5">
+      <div class="camera-footer flex flex-wrap gap-4 p-5 justify-center border-t border-white/20 dark:border-white/5">
         <button id="capture-btn" data-i18n="capture" class="px-6 py-3 border-none rounded-xl text-base font-semibold cursor-pointer transition-all duration-300 bg-nm-bg text-blue-600 dark:text-blue-400 shadow-nm-btn active:shadow-nm-btn-active disabled:opacity-60 disabled:cursor-not-allowed select-none" type="button">Capture</button>
         <button id="stop-camera" data-i18n="close" class="px-6 py-3 border-none rounded-xl text-base font-semibold cursor-pointer transition-all duration-300 bg-nm-bg text-red-600 dark:text-red-400 shadow-nm-btn active:shadow-nm-btn-active select-none" type="button">Close</button>
       </div>
     </div>
-  </div>
+  </dialog>
   
   <script src="app-config.js" defer></script>
   <script src="translations.js" defer></script>

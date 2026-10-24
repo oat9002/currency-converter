@@ -6,7 +6,7 @@ const vm = require('node:vm');
 function loadWorker(caches) {
   const listeners = {};
   vm.runInNewContext(fs.readFileSync('sw.js', 'utf8'), {
-    caches, self: { addEventListener(type, callback) { listeners[type] = callback; },
+    caches, URL, self: { addEventListener(type, callback) { listeners[type] = callback; },
       skipWaiting: async () => {}, clients: { claim: async () => {} } }
   });
   return listeners;
@@ -37,4 +37,12 @@ test('offline installation caches OCR worker alongside the converter', async () 
   for (const dependency of ['/app-config.js', '/translations.js', '/i18n.js']) {
     assert.ok(urls.includes(dependency), dependency + ' must be available offline');
   }
+});
+
+test('exchange-rate requests bypass service-worker cache fallbacks', () => {
+  const handlers = loadWorker({});
+  let intercepted = false;
+  handlers.fetch({ request: { method: 'GET', mode: 'cors', url: 'https://latest.currency-api.pages.dev/v1/currencies/thb.json' },
+    respondWith() { intercepted = true; } });
+  assert.equal(intercepted, false);
 });

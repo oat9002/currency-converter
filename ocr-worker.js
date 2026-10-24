@@ -2,19 +2,34 @@
 importScripts('app-config.js', 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
 
 let workerPromise = null;
+let activeLanguages = null;
 let processingCanvas = null;
+let recognitionQueue = Promise.resolve();
 
-function ensureWorkerInitialized() {
+function getOCRLanguages(currency) {
+  const language = CurrencyConverterConfig.currencies[currency]?.language;
+  const model = CurrencyConverterConfig.languages[language]?.ocr;
+  if (!model) throw new Error('Unsupported receipt currency');
+  return [...new Set(['eng', model])].join('+');
+}
+
+async function ensureWorkerInitialized(currency) {
+  const languages = getOCRLanguages(currency);
   if (!workerPromise) {
-    workerPromise = (async () => {
-      // v5 creates, loads, and initializes the engine in one asynchronous call.
-      const worker = await Tesseract.createWorker('eng+tha', 1);
-      // Keep receipt labels: a digit-only whitelist prevented total-keyword scoring.
-      await worker.setParameters({ preserve_interword_spaces: '1' });
-      return worker;
-    })();
+    workerPromise = Tesseract.createWorker(languages, 1);
+    const worker = await workerPromise;
+    await worker.setParameters({ preserve_interword_spaces: '1' });
+    activeLanguages = languages;
+    return worker;
   }
-  return workerPromise;
+  const worker = await workerPromise;
+  if (activeLanguages !== languages) {
+    // Reuse the engine; v5 downloads only models that are not already loaded.
+    await worker.reinitialize(languages, 1);
+    await worker.setParameters({ preserve_interword_spaces: '1' });
+    activeLanguages = languages;
+  }
+  return worker;
 }
 
 function preprocessBitmapToCanvas(bitmap) {
@@ -40,15 +55,17 @@ function preprocessBitmapToCanvas(bitmap) {
 }
 
 function normalizeKeywordText(value) {
-  return String(value || '').toLowerCase().replace(/[^a-z0-9\u0e00-\u0e7f\u4e00-\u9fff]/g, '');
+  return String(value || '').normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 }
 
 const KEYWORDS = ['total', 'amount', 'amt', 'due', 'payable', 'balance',
-  'ยอดรวม', 'ยอดชำระ', 'รวมทั้งสิ้น', 'จำนวนเงิน', '合計', '總計', '支付', '金额']
+  'ยอดรวม', 'ยอดชำระ', 'รวมทั้งสิ้น', 'จำนวนเงิน', '合計', '總計', '支付', '金额',
+  'jumlah', 'bayar', 'kabuuan', 'halaga', '総額', '應付', '總額',
+  '합계', '총액', '결제금액', 'tổng cộng', 'thành tiền', 'tổng tiền']
   .map(normalizeKeywordText);
 
 function normalizeDigits(value) {
-  return String(value || '').replace(/[๐-๙]/g, digit => '๐๑๒๓๔๕๖๗๘๙'.indexOf(digit))
+  return String(value || '').normalize('NFKC').replace(/[๐-๙]/g, digit => '๐๑๒๓๔๕๖๗๘๙'.indexOf(digit))
     .replace(/[\u200B-\u200D\uFEFF]/g, '');
 }
 
@@ -121,11 +138,10 @@ function scoreResult(data = {}) {
   return { text, candidates, score: candidates[0]?.score ?? -1 };
 }
 
-self.onmessage = async ({ data: message }) => {
-  if (message?.type !== 'recognize' || !message.image) return;
+async function recognizeMessage(message) {
   const { id, image } = message;
   try {
-    const worker = await ensureWorkerInitialized();
+    const worker = await ensureWorkerInitialized(message.currency || CurrencyConverterConfig.baseCurrency);
     const isBitmap = typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap;
     const input = isBitmap ? preprocessBitmapToCanvas(image) : image;
     let best = { score: -1, text: '', candidates: [] };
@@ -143,4 +159,12 @@ self.onmessage = async ({ data: message }) => {
   } finally {
     if (typeof image.close === 'function') image.close();
   }
+}
+
+self.onmessage = ({ data: message }) => {
+  if (message?.type !== 'recognize' || !message.image) return;
+  // Keep model changes and recognition together, even if messages arrive concurrently.
+  const task = recognitionQueue.then(() => recognizeMessage(message));
+  recognitionQueue = task.catch(() => {});
+  return task;
 };

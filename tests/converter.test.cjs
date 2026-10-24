@@ -52,6 +52,7 @@ test('OCR Blob fallback delivers response and reuses the worker', async () => {
     await tick();
     const worker = workers[0];
     assert.equal(worker.message.image.blob, true);
+    assert.equal(worker.message.currency, 'vnd');
     worker.onmessage({ data: { id: worker.message.id, result: { candidates: [{ value: 100 }] } } });
     assert.equal((await scan).candidates[0].value, 100);
   }
@@ -80,7 +81,7 @@ test('closing camera cancels pending scan and hides candidate UI', async () => {
   await rejected;
   await tick();
   assert.equal(workers[0].terminated, true);
-  assert.equal(element('camera-modal').style.display, 'none');
+  assert.equal(element('camera-modal').open, false);
   assert.equal(element('ocr-candidates').style.display, 'none');
   assert.equal(workers[0].message, undefined);
 });
@@ -118,4 +119,50 @@ test('ambiguous candidates require selection, then apply using current currency 
   assert.equal(element('thb').value, '100.03');
   assert.equal(element('ocr-status').style.display, 'flex');
   context.closeCamera(); // clear automatic-close timer
+});
+
+test('Escape closes the dialog and cancels an unfinished scan', async () => {
+  const { context, element, workers } = loadApp({ navigator: { mediaDevices: {
+    getUserMedia: () => new Promise(() => {})
+  } } });
+  element('camera-btn').listeners.click();
+  assert.equal(element('camera-modal').open, true);
+  const scan = context.runOCROnCanvas(element('camera-canvas'), 1);
+  const rejected = assert.rejects(scan, /cancelled/);
+  let prevented = false;
+  element('camera-modal').listeners.cancel({ preventDefault() { prevented = true; } });
+  await rejected;
+  assert.equal(prevented, true);
+  assert.equal(element('camera-modal').open, false);
+  assert.equal(workers[0].terminated, true);
+});
+
+test('a native close event releases the camera and ignores late permission results', async () => {
+  let resolveCamera;
+  let stopped = false;
+  const { element } = loadApp({ navigator: { mediaDevices: {
+    getUserMedia: () => new Promise(resolve => { resolveCamera = resolve; })
+  } } });
+  const opening = element('camera-btn').listeners.click();
+  element('camera-modal').close();
+  resolveCamera({ getTracks: () => [{ stop() { stopped = true; } }] });
+  await opening;
+  assert.equal(stopped, true);
+});
+
+test('selection shows every available amount and retry restores the camera preview state', () => {
+  const { context, element } = loadApp();
+  const candidates = [100, 200, 300, 400, 500, 600].map(value => ({ value, confidence: 70, score: 100 }));
+  context.showCandidateOptions(candidates);
+  const children = element('ocr-candidates').children;
+  assert.equal(children.length, candidates.length + 2); // prompt, every amount, retry
+  assert.equal(element('camera-modal').dataset.mode, 'choosing');
+  assert.equal(element('ocr-candidates').style.display, 'grid');
+  children[children.length - 1].listeners.click();
+  assert.equal(element('camera-modal').dataset.mode, undefined);
+  assert.equal(element('ocr-candidates').style.display, 'none');
+  assert.equal(element('capture-btn').disabled, false);
+  context.showCandidateOptions(candidates);
+  context.closeCamera();
+  assert.equal(element('camera-modal').dataset.mode, undefined);
 });

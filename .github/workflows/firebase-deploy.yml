@@ -22,6 +22,15 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Install dependencies
+        run: npm install
+
+      - name: Test site
+        run: npm test
+
+      - name: Build site
+        run: npm run build
+
       - name: Bump version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -43,12 +52,6 @@ jobs:
           git add version.json sw.js
           git commit -m "chore: bump version to $VERSION"
           git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build site
-        run: npm run build
 
       - name: Deploy to Firebase Hosting
         env:

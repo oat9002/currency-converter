@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Camera dialog keyboard test</title>
+<h1>Camera dialog keyboard test</h1>
+<p>This fixture uses a pending simulated camera request and never accesses a real camera.</p>
+<button id="open-test-camera" disabled>Open test camera</button>
+<p id="status" role="status">Loading converter…</p>
+<iframe id="app" src="/" title="Converter under test" style="width:100%;height:760px;border:0"></iframe>
+<script>
+const frame = document.getElementById('app');
+frame.addEventListener('load', () => {
+  const app = frame.contentWindow;
+  Object.defineProperty(app.navigator, 'mediaDevices', { configurable: true,
+    value: { getUserMedia: () => new Promise(() => {}) } });
+  const language = app.document.getElementById('language-select');
+  language.value = 'en';
+  language.dispatchEvent(new app.Event('change'));
+  document.getElementById('open-test-camera').disabled = false;
+  document.getElementById('status').textContent = 'Ready: open the dialog, use Tab, then press Escape.';
+  app.document.getElementById('camera-modal').addEventListener('close', () => {
+    const restored = app.document.activeElement?.id === 'camera-btn';
+    document.getElementById('status').textContent = restored
+      ? 'PASS: native dialog closed and keyboard focus returned to the camera button'
+      : 'FAIL: focus was not restored';
+  });
+});
+document.getElementById('open-test-camera').addEventListener('click', () => {
+  const button = frame.contentDocument.getElementById('camera-btn');
+  button.focus();
+  button.click();
+  document.getElementById('status').textContent = 'Dialog open: Tab should stay inside; Escape should close it.';
+});
+</script>
+</html>

@@ -24,7 +24,15 @@ globalThis.CurrencyConverterMessages = {
     "chooseAmount": "Choose the correct amount:",
     "retry": "None of these — Retry",
     "rateUnavailable": "(rate unavailable)",
-    "exchangeRate": "({amount} {from} = {rate} {to})"
+    "exchangeRate": "({amount} {from} = {rate} {to})",
+    "ratesLoading": "Loading rates…",
+    "ratesAsOf": "Rates as of {date}",
+    "ratesDateUnknown": "Source date unavailable",
+    "ratesCached": "Saved rates",
+    "ratesStale": "May be outdated",
+    "ratesOffline": "Offline",
+    "ratesUpdateFailed": "Refresh failed",
+    "ratesUnavailable": "Rates unavailable"
   },
   "th": {
     "pageTitle": "เครื่องแปลงสกุลเงินบาท",
@@ -50,7 +58,15 @@ globalThis.CurrencyConverterMessages = {
     "chooseAmount": "เลือกจำนวนเงินที่ถูกต้อง:",
     "retry": "ไม่มีจำนวนเงินที่ถูกต้อง — สแกนใหม่",
     "rateUnavailable": "(ไม่มีข้อมูลอัตราแลกเปลี่ยน)",
-    "exchangeRate": "({amount} {from} = {rate} {to})"
+    "exchangeRate": "({amount} {from} = {rate} {to})",
+    "ratesLoading": "กำลังโหลดอัตราแลกเปลี่ยน…",
+    "ratesAsOf": "อัตราแลกเปลี่ยน ณ {date}",
+    "ratesDateUnknown": "ไม่มีข้อมูลวันที่ของอัตราแลกเปลี่ยน",
+    "ratesCached": "อัตราที่บันทึกไว้",
+    "ratesStale": "ข้อมูลอาจล้าสมัย",
+    "ratesOffline": "ออฟไลน์",
+    "ratesUpdateFailed": "อัปเดตไม่สำเร็จ",
+    "ratesUnavailable": "ไม่มีข้อมูลอัตราแลกเปลี่ยน"
   },
   "id": {
     "pageTitle": "Konverter Mata Uang THB",
@@ -76,7 +92,15 @@ globalThis.CurrencyConverterMessages = {
     "chooseAmount": "Pilih nominal yang benar:",
     "retry": "Tidak ada yang benar — Pindai ulang",
     "rateUnavailable": "(kurs tidak tersedia)",
-    "exchangeRate": "({amount} {from} = {rate} {to})"
+    "exchangeRate": "({amount} {from} = {rate} {to})",
+    "ratesLoading": "Memuat kurs…",
+    "ratesAsOf": "Kurs per {date}",
+    "ratesDateUnknown": "Tanggal sumber tidak tersedia",
+    "ratesCached": "Kurs tersimpan",
+    "ratesStale": "Mungkin sudah kedaluwarsa",
+    "ratesOffline": "Offline",
+    "ratesUpdateFailed": "Pembaruan gagal",
+    "ratesUnavailable": "Kurs tidak tersedia"
   },
   "fil": {
     "pageTitle": "Pang-convert ng Pera mula THB",
@@ -102,7 +126,15 @@ globalThis.CurrencyConverterMessages = {
     "chooseAmount": "Piliin ang tamang halaga:",
     "retry": "Wala sa mga ito — I-scan muli",
     "rateUnavailable": "(walang available na palitan)",
-    "exchangeRate": "({amount} {from} = {rate} {to})"
+    "exchangeRate": "({amount} {from} = {rate} {to})",
+    "ratesLoading": "Kinukuha ang palitan…",
+    "ratesAsOf": "Palitan noong {date}",
+    "ratesDateUnknown": "Hindi available ang petsa ng pinagmulan",
+    "ratesCached": "Naka-save na palitan",
+    "ratesStale": "Maaaring luma na",
+    "ratesOffline": "Offline",
+    "ratesUpdateFailed": "Hindi na-update",
+    "ratesUnavailable": "Walang available na palitan"
   },
   "ja": {
     "pageTitle": "THB通貨換算",
@@ -128,7 +160,15 @@ globalThis.CurrencyConverterMessages = {
     "chooseAmount": "正しい金額を選んでください:",
     "retry": "該当なし — もう一度読み取る",
     "rateUnavailable": "(為替レートを取得できません)",
-    "exchangeRate": "({amount} {from} = {rate} {to})"
+    "exchangeRate": "({amount} {from} = {rate} {to})",
+    "ratesLoading": "為替レートを取得中…",
+    "ratesAsOf": "{date}時点の為替レート",
+    "ratesDateUnknown": "レートの日付を確認できません",
+    "ratesCached": "保存済みのレート",
+    "ratesStale": "古い情報の可能性があります",
+    "ratesOffline": "オフライン",
+    "ratesUpdateFailed": "更新できませんでした",
+    "ratesUnavailable": "為替レートを取得できません"
   },
   "ms": {
     "pageTitle": "Penukar Mata Wang THB",
@@ -154,7 +194,15 @@ globalThis.CurrencyConverterMessages = {
     "chooseAmount": "Pilih amaun yang betul:",
     "retry": "Tiada yang betul — Imbas semula",
     "rateUnavailable": "(kadar tidak tersedia)",
-    "exchangeRate": "({amount} {from} = {rate} {to})"
+    "exchangeRate": "({amount} {from} = {rate} {to})",
+    "ratesLoading": "Memuatkan kadar…",
+    "ratesAsOf": "Kadar pada {date}",
+    "ratesDateUnknown": "Tarikh sumber tidak tersedia",
+    "ratesCached": "Kadar tersimpan",
+    "ratesStale": "Mungkin sudah lapuk",
+    "ratesOffline": "Luar talian",
+    "ratesUpdateFailed": "Kemas kini gagal",
+    "ratesUnavailable": "Kadar tidak tersedia"
   },
   "zh-Hans": {
     "pageTitle": "泰铢汇率换算",
@@ -180,7 +228,15 @@ globalThis.CurrencyConverterMessages = {
     "chooseAmount": "请选择正确的金额：",
     "retry": "都不正确 — 重新扫描",
     "rateUnavailable": "（汇率暂不可用）",
-    "exchangeRate": "（{amount} {from} = {rate} {to}）"
+    "exchangeRate": "（{amount} {from} = {rate} {to}）",
+    "ratesLoading": "正在加载汇率…",
+    "ratesAsOf": "汇率日期：{date}",
+    "ratesDateUnknown": "汇率日期未知",
+    "ratesCached": "已保存的汇率",
+    "ratesStale": "数据可能已过时",
+    "ratesOffline": "离线",
+    "ratesUpdateFailed": "更新失败",
+    "ratesUnavailable": "汇率暂不可用"
   },
   "ko": {
     "pageTitle": "THB 환율 계산기",
@@ -206,7 +262,15 @@ globalThis.CurrencyConverterMessages = {
     "chooseAmount": "올바른 금액을 선택해 주세요:",
     "retry": "해당 없음 — 다시 스캔",
     "rateUnavailable": "(환율 정보 없음)",
-    "exchangeRate": "({amount} {from} = {rate} {to})"
+    "exchangeRate": "({amount} {from} = {rate} {to})",
+    "ratesLoading": "환율을 불러오는 중…",
+    "ratesAsOf": "{date} 기준 환율",
+    "ratesDateUnknown": "환율 날짜 정보 없음",
+    "ratesCached": "저장된 환율",
+    "ratesStale": "오래된 정보일 수 있습니다",
+    "ratesOffline": "오프라인",
+    "ratesUpdateFailed": "업데이트 실패",
+    "ratesUnavailable": "환율 정보 없음"
   },
   "zh-Hant": {
     "pageTitle": "泰銖匯率換算",
@@ -232,7 +296,15 @@ globalThis.CurrencyConverterMessages = {
     "chooseAmount": "請選擇正確的金額：",
     "retry": "全部不正確 — 重新掃描",
     "rateUnavailable": "（暫無匯率資料）",
-    "exchangeRate": "（{amount} {from} = {rate} {to}）"
+    "exchangeRate": "（{amount} {from} = {rate} {to}）",
+    "ratesLoading": "正在載入匯率…",
+    "ratesAsOf": "匯率日期：{date}",
+    "ratesDateUnknown": "匯率日期不詳",
+    "ratesCached": "已儲存的匯率",
+    "ratesStale": "資料可能已過時",
+    "ratesOffline": "離線",
+    "ratesUpdateFailed": "更新失敗",
+    "ratesUnavailable": "暫無匯率資料"
   },
   "vi": {
     "pageTitle": "Chuyển đổi tiền tệ THB",
@@ -258,6 +330,14 @@ globalThis.CurrencyConverterMessages = {
     "chooseAmount": "Chọn số tiền chính xác:",
     "retry": "Không có số tiền đúng — Quét lại",
     "rateUnavailable": "(không có tỷ giá)",
-    "exchangeRate": "({amount} {from} = {rate} {to})"
+    "exchangeRate": "({amount} {from} = {rate} {to})",
+    "ratesLoading": "Đang tải tỷ giá…",
+    "ratesAsOf": "Tỷ giá ngày {date}",
+    "ratesDateUnknown": "Không có ngày cập nhật từ nguồn",
+    "ratesCached": "Tỷ giá đã lưu",
+    "ratesStale": "Dữ liệu có thể đã cũ",
+    "ratesOffline": "Ngoại tuyến",
+    "ratesUpdateFailed": "Cập nhật thất bại",
+    "ratesUnavailable": "Không có tỷ giá"
   }
 };

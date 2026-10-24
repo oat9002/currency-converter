@@ -115,3 +115,61 @@ select:focus::-webkit-calendar-picker-indicator {
   field-sizing: content;
   flex: 0 1 auto;
 }
+
+.camera-dialog {
+  margin: auto;
+  padding: 0;
+  border: 0;
+  inline-size: min(30rem, calc(100% - 2rem));
+  max-inline-size: none;
+  max-block-size: 90dvh;
+  border-radius: 2rem;
+  background: transparent;
+  color: inherit;
+}
+
+.camera-dialog::backdrop {
+  background: rgb(0 0 0 / 60%);
+  backdrop-filter: blur(12px);
+}
+
+.camera-panel {
+  max-block-size: 90dvh;
+}
+
+/* Choosing an amount needs the screen space previously used by the live preview. */
+.camera-dialog[data-mode="choosing"] {
+  inline-size: min(36rem, calc(100% - 2rem));
+}
+
+.camera-dialog[data-mode="choosing"] .camera-preview,
+.camera-dialog[data-mode="choosing"] .camera-footer {
+  display: none;
+}
+
+.camera-dialog[data-mode="choosing"] .camera-header,
+.camera-dialog[data-mode="choosing"] .camera-body {
+  padding: 1rem;
+}
+
+#ocr-candidates {
+  grid-template-columns: repeat(auto-fit, minmax(min(6.75rem, 100%), 1fr));
+}
+
+#ocr-choice-label,
+.ocr-retry {
+  grid-column: 1 / -1;
+}
+
+.ocr-choice,
+.ocr-retry {
+  min-block-size: 2.75rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-height: 600px) {
+  .camera-dialog[data-mode="choosing"] .camera-header,
+  .camera-dialog[data-mode="choosing"] .camera-body {
+    padding: 0.5rem 1rem;
+  }
+}

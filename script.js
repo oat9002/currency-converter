@@ -235,6 +235,8 @@ const cameraBtn = document.getElementById('camera-btn');
 const cameraModal = document.getElementById('camera-modal');
 const cameraVideo = document.getElementById('camera-video');
 const cameraCanvas = document.getElementById('camera-canvas');
+const focusMarker = document.getElementById('camera-focus-marker');
+const focusStatus = document.getElementById('camera-focus-status');
 const closeCameraBtn = document.getElementById('close-camera');
 const stopCameraBtn = document.getElementById('stop-camera');
 const captureBtn = document.getElementById('capture-btn');
@@ -244,6 +246,9 @@ let stream = null;
 let cameraActive = false;
 let cameraSession = 0;
 let cameraTimer = null;
+let focusTimer = null;
+let focusRequest = 0;
+let focusing = false;
 let scanStatus = null;
 let candidateChoices = [];
 let ocrWorker = null;
@@ -256,6 +261,7 @@ cameraBtn.addEventListener('click', async () => {
   cameraActive = true;
   cameraModal.showModal();
   captureBtn.disabled = true;
+  focusStatus.textContent = I18N.t('tapToFocus');
   try {
     const cameraStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
@@ -275,6 +281,64 @@ cameraBtn.addEventListener('click', async () => {
   }
 });
 
+async function focusCamera(clientX, clientY) {
+  const track = stream?.getVideoTracks?.()[0];
+  if (!cameraActive || !track || focusing || captureBtn.disabled || cameraModal.dataset.mode === 'choosing') return;
+  const width = cameraVideo.videoWidth;
+  const height = cameraVideo.videoHeight;
+  if (!width || !height) return;
+  const rect = cameraVideo.getBoundingClientRect();
+  const scale = Math.min(rect.width / width, rect.height / height);
+  const imageWidth = width * scale;
+  const imageHeight = height * scale;
+  if (!imageWidth || !imageHeight) return;
+  const left = rect.left + (rect.width - imageWidth) / 2;
+  const top = rect.top + (rect.height - imageHeight) / 2;
+  const x = (clientX - left) / imageWidth;
+  const y = (clientY - top) / imageHeight;
+  // Ignore taps in the object-contain letterbox, rather than focusing an edge.
+  if (x < 0 || x > 1 || y < 0 || y > 1) return;
+  const session = cameraSession;
+  const request = ++focusRequest;
+  clearTimeout(focusTimer);
+  focusMarker.hidden = true;
+  try {
+    const modes = track.getCapabilities?.().focusMode || [];
+    const mode = modes.includes('single-shot') ? 'single-shot' : modes.includes('continuous') ? 'continuous' : null;
+    if (!mode || !navigator.mediaDevices.getSupportedConstraints?.().pointsOfInterest || !track.applyConstraints) {
+      focusStatus.textContent = I18N.t('focusUnavailable');
+      return;
+    }
+    focusing = true;
+    // Points of interest use normalized image coordinates (W3C Image Capture).
+    const constraints = track.getConstraints?.() || {};
+    await track.applyConstraints({
+      ...constraints,
+      advanced: [...(constraints.advanced || []), { focusMode: mode, pointsOfInterest: [{ x, y }] }]
+    });
+    if (session !== cameraSession || request !== focusRequest) return;
+    const previewRect = focusMarker.parentElement.getBoundingClientRect();
+    focusMarker.style.left = `${clientX - previewRect.left}px`;
+    focusMarker.style.top = `${clientY - previewRect.top}px`;
+    focusMarker.hidden = false;
+    focusStatus.textContent = I18N.t('tapToFocus');
+    // This acknowledges the request, not a guarantee that the lens has settled.
+    focusTimer = setTimeout(() => { focusMarker.hidden = true; }, 1000);
+  } catch (error) {
+    if (session === cameraSession && request === focusRequest) focusStatus.textContent = I18N.t('focusFailed');
+  } finally {
+    if (request === focusRequest) focusing = false;
+  }
+}
+
+cameraVideo.addEventListener('click', event => focusCamera(event.clientX, event.clientY));
+cameraVideo.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  const rect = cameraVideo.getBoundingClientRect();
+  focusCamera(rect.left + rect.width / 2, rect.top + rect.height / 2);
+});
+
 function resetOCRWorker(error = new Error('Scan cancelled')) {
   if (ocrWorker) ocrWorker.terminate();
   ocrWorker = null;
@@ -286,6 +350,10 @@ function resetOCRWorker(error = new Error('Scan cancelled')) {
 }
 
 function cleanupCamera() {
+  ++focusRequest;
+  focusing = false;
+  clearTimeout(focusTimer);
+  focusMarker.hidden = true;
   cameraActive = false;
   delete cameraModal.dataset.mode;
   ++cameraSession;

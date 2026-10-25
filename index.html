@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="tailwind.css">
 </head>
 <body class="min-h-screen bg-nm-bg text-nm-text font-sans text-base transition-colors duration-300">
-  <div class="min-h-screen flex flex-col items-center justify-center px-4 py-8">
+  <div class="min-h-screen flex flex-col items-center justify-center p-4">
     <form class="bg-nm-bg rounded-[32px] shadow-nm-flat p-8 w-full max-w-[380px] flex flex-col gap-5 mx-4 relative border border-white/80 dark:border-white/5" autocomplete="off" onsubmit="return false;">
       <button id="theme-toggle" class="absolute top-4 right-4 w-10 h-10 rounded-full bg-nm-bg text-nm-text shadow-nm-btn active:shadow-nm-btn-active cursor-pointer flex items-center justify-center transition-all duration-300 z-10 select-none border border-white/60 dark:border-white/5" data-i18n-aria-label="toggleTheme" aria-label="Toggle dark mode" type="button">
         <svg id="sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -87,10 +87,12 @@
       </div>
       <div class="camera-body p-4 flex flex-col gap-4">
         <div class="camera-preview relative rounded-2xl overflow-hidden border border-white/60 dark:border-white/5 shadow-nm-sunken bg-black">
-          <video id="camera-video" autoplay playsinline class="w-full max-h-[50vh] object-contain bg-black"></video>
+          <video id="camera-video" autoplay playsinline role="button" tabindex="0" data-i18n-aria-label="tapToFocus" aria-label="Tap to focus" aria-describedby="camera-focus-status" class="w-full max-h-[50vh] object-contain bg-black"></video>
           <div id="camera-guide" class="pointer-events-none absolute inset-x-[12%] top-[18%] h-[38%] border-2 border-blue-400/80 rounded-2xl" style="box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);"></div>
           <canvas id="camera-canvas" style="display: none;"></canvas>
+          <div id="camera-focus-marker" hidden aria-hidden="true"></div>
         </div>
+        <p id="camera-focus-status" class="text-sm text-nm-muted" role="status" data-i18n="tapToFocus">Tap to focus</p>
         <div id="ocr-status" role="status" class="hidden flex items-center justify-center gap-3 p-3 rounded-xl bg-nm-bg shadow-nm-sunken text-nm-text text-sm font-semibold" style="display: none;">
           <div class="ocr-spinner"></div>
           <span data-i18n="reading">Reading numbers…</span>

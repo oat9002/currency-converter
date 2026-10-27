@@ -1,0 +1,11 @@
+Generated with the built-in image_gen tool.
+
+Correction prompt: Edit this currency converter favicon. Correct only the upper right-pointing arrow: its arrowhead is malformed with the bottom diagonal missing. Give it a COMPLETE symmetric triangular arrowhead, with both upper and lower diagonal edges, and two visible shoulders extending equally above AND below the horizontal shaft. The upper arrow must be exactly the same complete shape as the lower left-pointing arrow rotated 180 degrees. Adjust spacing only enough to leave a clear blue gap between both arrows. Preserve the bold white arrows, royal blue rounded square, transparent exterior, overall minimal icon design and colors. No text, no added elements.
+
+Use case: logo-brand
+Asset type: square favicon for a currency converter website
+Primary request: Create one polished browser-tab icon: two bold white horizontal exchange arrows pointing opposite directions, stacked, on a vivid royal blue rounded square. Match a minimal soft-gray and blue currency converter interface.
+Style/medium: crisp minimal geometric app icon, flat vector-like artwork, very subtle blue tonal depth only.
+Composition/framing: single centered icon filling the square canvas; blue rounded-square silhouette with small transparent outer corners, generous thick arrows readable at 16x16 pixels.
+Color palette: royal blue #2563eb and white.
+Constraints: no text, no currency letters, no tiny details, no coins, no extra objects, no mockup, no watermark; output the actual icon only.

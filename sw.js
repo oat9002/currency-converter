@@ -4,6 +4,9 @@ const CACHE_NAME = 'currency-converter-v1.0.25';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
+  '/favicon.ico',
+  '/assets/favicon-32.png',
+  '/assets/favicon-16.png',
   '/style.css',
   '/tailwind.css',
   '/app-config.js',

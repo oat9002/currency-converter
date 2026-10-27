@@ -601,6 +601,7 @@ languageSelect.addEventListener('change', () => {
   refreshLanguage();
 });
 refreshLanguage();
+globalThis.CurrencyConverterStartup?.reveal();
 
 // Theme toggle functionality
 function initThemeToggle() {

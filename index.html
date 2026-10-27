@@ -6,6 +6,29 @@
   <meta name="description" content="Convert THB into major world currencies with quick OCR scanning support.">
   <meta name="theme-color" content="#f5f5f7">
   <title>THB Currency Converter</title>
+  <style>
+    html[data-language-pending] body { visibility: hidden; }
+  </style>
+  <script id="language-startup">
+    // Prevent the English fallback from painting before the initial translation.
+    // Only JavaScript enables the guard, so the fallback stays visible without it.
+    globalThis.CurrencyConverterStartup = (() => {
+      const root = document.documentElement;
+      root.dataset.languagePending = '';
+      const reveal = () => {
+        delete root.dataset.languagePending;
+        clearTimeout(timeout);
+      };
+      // Failed or stalled scripts must not leave the page permanently hidden.
+      const timeout = setTimeout(reveal, 5000);
+      window.addEventListener('load', reveal, { once: true });
+      return { reveal };
+    })();
+  </script>
+  <script src="app-config.js" defer></script>
+  <script src="translations.js" defer></script>
+  <script src="i18n.js" defer></script>
+  <script src="script.js" defer></script>
   <link rel="icon" href="favicon.ico" sizes="32x32">
   <link rel="icon" type="image/png" href="assets/favicon-32.png" sizes="32x32">
   <link rel="icon" type="image/png" href="assets/favicon-16.png" sizes="16x16">
@@ -110,10 +133,6 @@
     </div>
   </dialog>
   
-  <script src="app-config.js" defer></script>
-  <script src="translations.js" defer></script>
-  <script src="i18n.js" defer></script>
-  <script src="script.js" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

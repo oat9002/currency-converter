@@ -1,9 +1,58 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const vm = require('node:vm');
 const { loadApp } = require('./app-fixture.cjs');
 
 function placeholders(value) { return [...value.matchAll(/\{(\w+)\}/g)].map(match => match[1]).sort(); }
+
+function loadStartupGuard() {
+  const html = fs.readFileSync('index.html', 'utf8');
+  const source = html.match(/<script id="language-startup">([\s\S]*?)<\/script>/)[1];
+  const root = { dataset: {} };
+  const listeners = {};
+  let fallback;
+  let cancelled = false;
+  const context = vm.createContext({
+    document: { documentElement: root },
+    window: { addEventListener(type, callback) { listeners[type] = callback; } },
+    setTimeout(callback, delay) { fallback = callback; assert.equal(delay, 5000); return 1; },
+    clearTimeout(id) { assert.equal(id, 1); cancelled = true; }
+  });
+  vm.runInContext(source, context);
+  return { html, root, listeners, fallback, context, cancelled: () => cancelled };
+}
+
+test('startup hides the fallback before body parsing and reveals after the initial language is applied', () => {
+  for (const [saved, browser, expected] of [
+    ['vi', ['th-TH'], 'vi-VN'],
+    [null, ['th-TH'], 'th-TH'],
+    ['unsupported', ['de-DE'], 'en-SG']
+  ]) {
+    const guard = loadStartupGuard();
+    assert.ok(guard.html.indexOf('id="language-startup"') < guard.html.indexOf('<body'));
+    assert.match(guard.html, /html\[data-language-pending\] body\s*\{\s*visibility: hidden;/);
+    assert.ok('languagePending' in guard.root.dataset);
+    const { context } = loadApp({
+      navigator: { languages: browser, onLine: true },
+      CurrencyConverterStartup: guard.context.CurrencyConverterStartup
+    }, { language: saved });
+    assert.equal(context.document.documentElement.lang, expected);
+    assert.equal(context.document.title, context.CurrencyConverterI18n.t('pageTitle'));
+    assert.ok(!('languagePending' in guard.root.dataset));
+    assert.ok(guard.cancelled());
+  }
+});
+
+test('startup reveals the fallback if scripts fail to load or stall', () => {
+  for (const trigger of [guard => guard.listeners.load(), guard => guard.fallback()]) {
+    const guard = loadStartupGuard();
+    trigger(guard);
+    assert.ok(!('languagePending' in guard.root.dataset));
+    assert.ok(guard.cancelled());
+    assert.doesNotThrow(() => guard.context.CurrencyConverterStartup.reveal());
+  }
+});
 
 test('every currency has a language and every offered language has a complete translation dictionary', () => {
   const { context, element } = loadApp();

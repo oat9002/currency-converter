@@ -3,12 +3,15 @@ const API_URL = 'https://latest.currency-api.pages.dev/v1/currencies/thb.json';
 const STORAGE_KEY = 'currencyConverter_state';
 const RATES_TTL_MS = 24 * 60 * 60 * 1000;
 const { currencies: CURRENCIES, baseCurrency: BASE_CURRENCY } = CurrencyConverterConfig;
-const CURRENCY_CODES = Object.keys(CURRENCIES).filter(code => code !== BASE_CURRENCY);
+const CURRENCY_CODES = Object.keys(CURRENCIES);
 const I18N = CurrencyConverterI18n;
 I18N.setLanguage(I18N.initialLanguage(readStorageState().language, navigator.languages || [navigator.language]));
 
 // Get elements
+// The first amount now follows the selected source currency.
 const thb = document.getElementById('thb');
+const sourceCurrencySelect = document.getElementById('source-currency-select');
+const sourceCurrencyName = document.getElementById('source-currency-name');
 const secondCurrency = document.getElementById('second-currency');
 const secondCurrencyLabel = document.getElementById('second-currency-label');
 const secondCurrencyRate = document.getElementById('second-currency-rate');
@@ -28,7 +31,7 @@ let rateRequestId = 0;
 
 function normalizeRates(data = {}) {
   return Object.fromEntries(CURRENCY_CODES.map(code => {
-    const rate = data?.[code];
+    const rate = code === BASE_CURRENCY ? 1 : data?.[code];
     return [code, Number.isFinite(rate) && rate > 0 ? rate : null];
   }));
 }
@@ -60,7 +63,7 @@ function validRateDate(value) {
 
 function getCachedRates() {
   const state = readStorageState();
-  if (!state.rates || !Object.values(normalizeRates(state.rates)).some(rate => rate !== null)) return null;
+  if (!state.rates || !CURRENCY_CODES.some(code => code !== BASE_CURRENCY && normalizeRates(state.rates)[code] !== null)) return null;
   // Expired rates remain useful offline, but their original age must stay visible.
   return { rates: state.rates, date: validRateDate(state.ratesDate), timestamp: Number(state.ratesTimestamp) || null };
 }
@@ -94,7 +97,11 @@ function updateRatesStatus() {
 }
 
 function getSelectedRate(currency) {
-  return exchangeRates[currency] ?? null;
+  const from = exchangeRates[sourceCurrencySelect.value];
+  const to = exchangeRates[currency];
+  if (currency === sourceCurrencySelect.value || !from || !to) return null;
+  const rate = to / from;
+  return Number.isFinite(rate) && rate > 0 && Number.isFinite(1 / rate) ? rate : null;
 }
 
 function applyRates(ratesData) {
@@ -123,7 +130,7 @@ async function loadExchangeRates() {
     const data = await response.json();
     if (requestId !== rateRequestId) return;
     const fetchedRates = normalizeRates(data?.thb);
-    if (!Object.values(fetchedRates).some(rate => rate !== null)) throw new Error('No usable exchange rates');
+    if (!CURRENCY_CODES.some(code => code !== BASE_CURRENCY && fetchedRates[code] !== null)) throw new Error('No usable exchange rates');
     rateSourceDate = validRateDate(data.date);
     rateFetchedAt = saveRatesToCache(fetchedRates, rateSourceDate);
     ratesFromCache = false;
@@ -143,21 +150,26 @@ async function loadExchangeRates() {
 window.addEventListener('offline', updateRatesStatus);
 window.addEventListener('online', loadExchangeRates);
 
-// Load saved currency selection from localStorage
+// Restore legacy target-only selections with THB as the source.
 function loadSavedCurrency() {
   const state = readStorageState();
-  const saved = state.selectedCurrency;
-  if (Object.prototype.hasOwnProperty.call(exchangeRates, saved)) {
-    currencySelect.value = saved;
-  }
+  sourceCurrencySelect.value = CURRENCY_CODES.includes(state.sourceCurrency) ? state.sourceCurrency : BASE_CURRENCY;
+  currencySelect.value = CURRENCY_CODES.includes(state.selectedCurrency) && state.selectedCurrency !== sourceCurrencySelect.value
+    ? state.selectedCurrency : CURRENCY_CODES.find(code => code !== sourceCurrencySelect.value);
+  updateCurrencyOptions();
   updateCurrencyDisplay();
 }
 
-// Save currency selection to localStorage
-function saveCurrencySelection(currency) {
+function saveCurrencySelection() {
   const state = readStorageState();
-  state.selectedCurrency = currency;
+  state.sourceCurrency = sourceCurrencySelect.value;
+  state.selectedCurrency = currencySelect.value;
   writeStorageState(state);
+}
+
+function updateCurrencyOptions() {
+  for (const option of sourceCurrencySelect.children) option.disabled = option.value === currencySelect.value;
+  for (const option of currencySelect.children) option.disabled = option.value === sourceCurrencySelect.value;
 }
 
 function getCurrencyLabel(currency) {
@@ -168,59 +180,78 @@ function getDisplayPrecision(currency) {
   return CURRENCIES[currency]?.precision ?? 2;
 }
 
+// Preserve meaningful digits when a cross-rate is smaller than the usual precision.
+function formatRate(rate, precision) {
+  return rate < 10 ** -precision
+    ? new Intl.NumberFormat(I18N.locale, { maximumSignificantDigits: 4 }).format(rate)
+    : I18N.formatNumber(rate, precision);
+}
+
 // Update the display based on selected currency
 function updateCurrencyDisplay() {
   const selectedCurrency = currencySelect.value;
   const selectedRate = getSelectedRate(selectedCurrency);
-  const rateText = selectedRate ? I18N.formatNumber(selectedRate, 2) : '—';
-  const inverseRateText = selectedRate ? I18N.formatNumber(1 / selectedRate, 4) : '—';
+  const rateText = selectedRate ? formatRate(selectedRate, 2) : '—';
+  const inverseRateText = selectedRate ? formatRate(1 / selectedRate, 4) : '—';
   const currencyLabel = getCurrencyLabel(selectedCurrency);
   currencyName.textContent = currencyLabel;
-  thbRateElement.textContent = selectedRate ? I18N.t('exchangeRate', { amount: 1, from: 'THB', rate: rateText, to: currencyLabel }) : I18N.t('rateUnavailable');
-  secondCurrencyRate.textContent = selectedRate ? I18N.t('exchangeRate', { amount: 1, from: currencyLabel, rate: inverseRateText, to: 'THB' }) : I18N.t('rateUnavailable');
+  const sourceLabel = getCurrencyLabel(sourceCurrencySelect.value);
+  sourceCurrencyName.textContent = sourceLabel;
+  thbRateElement.textContent = selectedRate ? I18N.t('exchangeRate', { amount: 1, from: sourceLabel, rate: rateText, to: currencyLabel }) : I18N.t('rateUnavailable');
+  secondCurrencyRate.textContent = selectedRate ? I18N.t('exchangeRate', { amount: 1, from: currencyLabel, rate: inverseRateText, to: sourceLabel }) : I18N.t('rateUnavailable');
   updateRatesStatus();
 }
 
-// Conversion functions
-function convertFromTHB(thbValue, targetCurrency) {
+// Conversion functions use the selected source's cross-rate.
+function convertFromSource(sourceValue, targetCurrency) {
   const rate = getSelectedRate(targetCurrency);
-  return rate ? thbValue * rate : 0;
+  return rate ? sourceValue * rate : 0;
 }
 
-function convertToTHB(secondCurrencyValue, sourceCurrency) {
+function convertToSource(secondCurrencyValue, sourceCurrency) {
   const rate = getSelectedRate(sourceCurrency);
   return rate ? secondCurrencyValue / rate : 0;
 }
 
 // Keep the last edited amount when selection or exchange rates change.
 function recalculateInputs() {
-  const fromTHB = inputSource === 'thb';
-  const source = fromTHB ? thb : secondCurrency;
-  const target = fromTHB ? secondCurrency : thb;
+  const fromSource = inputSource === 'thb';
+  const source = fromSource ? thb : secondCurrency;
+  const target = fromSource ? secondCurrency : thb;
   const value = Number.parseFloat(source.value);
   const currency = currencySelect.value;
   if (!Number.isFinite(value) || !getSelectedRate(currency)) {
     target.value = '';
     return;
   }
-  const converted = fromTHB ? convertFromTHB(value, currency) : convertToTHB(value, currency);
-  target.value = converted.toFixed(fromTHB ? getDisplayPrecision(currency) : 2);
+  const converted = fromSource ? convertFromSource(value, currency) : convertToSource(value, currency);
+  target.value = converted.toFixed(fromSource ? getDisplayPrecision(currency) : getDisplayPrecision(sourceCurrencySelect.value));
 }
 
-currencySelect.replaceChildren(...CURRENCY_CODES.map(code => {
-  const option = document.createElement('option');
-  option.value = code;
-  option.textContent = getCurrencyLabel(code);
-  return option;
-}));
+for (const select of [sourceCurrencySelect, currencySelect]) {
+  select.replaceChildren(...CURRENCY_CODES.map(code => {
+    const option = document.createElement('option');
+    option.value = code;
+    option.textContent = getCurrencyLabel(code);
+    return option;
+  }));
+}
 loadSavedCurrency();
 loadExchangeRates();
 
-currencySelect.addEventListener('change', () => {
-  saveCurrencySelection(currencySelect.value);
-  updateCurrencyDisplay();
-  recalculateInputs();
-});
+for (const select of [sourceCurrencySelect, currencySelect]) {
+  select.addEventListener('change', () => {
+    // Also guard scripted changes and corrupted values, beyond disabled options.
+    if (!CURRENCY_CODES.includes(select.value) || sourceCurrencySelect.value === currencySelect.value) {
+      loadSavedCurrency();
+      return;
+    }
+    saveCurrencySelection();
+    updateCurrencyOptions();
+    updateCurrencyDisplay();
+    recalculateInputs();
+  });
+}
 thb.addEventListener('input', () => {
   inputSource = 'thb';
   recalculateInputs();

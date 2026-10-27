@@ -60,7 +60,7 @@ test('every currency has a language and every offered language has a complete tr
   const messages = context.CurrencyConverterMessages;
   const expectedLanguages = [...new Set(Object.values(currencies).map(currency => currency.language))];
   assert.equal(currencies[baseCurrency].language, 'th');
-  assert.deepEqual(element('currency-select').children.map(option => option.value), Object.keys(currencies).filter(code => code !== baseCurrency));
+  assert.deepEqual(element('currency-select').children.map(option => option.value), Object.keys(currencies));
   assert.deepEqual(element('language-select').children.map(option => option.value), expectedLanguages);
   for (const [code, currency] of Object.entries(currencies)) {
     assert.match(code, /^[a-z]{3}$/);
@@ -104,7 +104,7 @@ test('changing language preserves amounts, currency, theme, and cached rates, an
   element('language-select').value = 'vi';
   element('language-select').listeners.change();
   assert.equal(context.document.documentElement.lang, 'vi-VN');
-  assert.equal(context.document.title, 'Chuyển đổi tiền tệ THB');
+  assert.equal(context.document.title, 'Chuyển đổi tiền tệ');
   assert.equal(state().language, 'vi');
   assert.equal(state().theme, 'dark');
   assert.equal(state().rates.vnd, 750);

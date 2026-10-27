@@ -166,3 +166,73 @@ test('selection shows every available amount and retry restores the camera previ
   context.closeCamera();
   assert.equal(element('camera-modal').dataset.mode, undefined);
 });
+
+test('defaults source to THB and disables the opposite selection in both menus', () => {
+  const { element } = loadApp();
+  assert.equal(element('source-currency-select').value, 'thb');
+  assert.equal(element('source-currency-select').children.find(option => option.value === 'vnd').disabled, true);
+  assert.equal(element('currency-select').children.find(option => option.value === 'thb').disabled, true);
+});
+
+test('all supported currency pairs convert both ways using each currency precision', () => {
+  const initial = loadApp();
+  const currencies = initial.context.CurrencyConverterConfig.currencies;
+  const rates = Object.fromEntries(Object.keys(currencies).map((code, i) => [code, i + 1]));
+  for (const from of Object.keys(currencies)) {
+    for (const to of Object.keys(currencies)) {
+      if (from === to) continue;
+      const { context, element } = loadApp({}, { sourceCurrency: from, selectedCurrency: to });
+      context.applyRates(rates);
+      element('thb').value = '120';
+      element('thb').listeners.input();
+      assert.equal(element('second-currency').value, (120 * rates[to] / rates[from]).toFixed(currencies[to].precision), `${from} to ${to}`);
+      element('second-currency').value = '60';
+      element('second-currency').listeners.input();
+      assert.equal(element('thb').value, (60 / (rates[to] / rates[from])).toFixed(currencies[from].precision), `${to} to ${from}`);
+    }
+  }
+});
+
+test('source changes recalculate, persist, restore, and reject identical selections', () => {
+  const { context, element, state } = loadApp();
+  context.applyRates({ vnd: 800, sgd: 0.04 });
+  element('thb').value = '10';
+  element('thb').listeners.input();
+  element('source-currency-select').value = 'sgd';
+  element('source-currency-select').listeners.change();
+  assert.equal(element('second-currency').value, '200000');
+  assert.equal(element('source-currency-name').textContent, 'SGD');
+  assert.match(element('thb-rate').textContent, /SGD.*VND/);
+  assert.equal(state().sourceCurrency, 'sgd');
+  const restored = loadApp({}, state());
+  assert.equal(restored.element('source-currency-select').value, 'sgd');
+  assert.equal(restored.element('currency-select').value, 'vnd');
+  for (const id of ['currency-select', 'source-currency-select']) {
+    element(id).value = id === 'currency-select' ? 'sgd' : 'vnd';
+    element(id).listeners.change();
+    assert.equal(element('source-currency-select').value, 'sgd');
+    assert.equal(element('currency-select').value, 'vnd');
+  }
+});
+
+test('invalid or duplicate saved currencies restore a distinct usable pair', () => {
+  for (const state of [
+    { sourceCurrency: 'missing', selectedCurrency: 'thb' },
+    { sourceCurrency: 'jpy', selectedCurrency: 'jpy' },
+    { sourceCurrency: 'thb', selectedCurrency: 'thb' }
+  ]) {
+    const { element } = loadApp({}, state);
+    assert.notEqual(element('source-currency-select').value, element('currency-select').value);
+  }
+});
+
+test('missing source rates clear the result and recover when that rate returns', () => {
+  const { context, element } = loadApp({}, { sourceCurrency: 'sgd', selectedCurrency: 'thb' });
+  element('thb').value = '10';
+  element('thb').listeners.input();
+  context.applyRates({ vnd: 800 });
+  assert.equal(element('second-currency').value, '');
+  assert.match(element('thb-rate').textContent, /unavailable/);
+  context.applyRates({ sgd: 0.04 });
+  assert.equal(element('second-currency').value, '250.00');
+});

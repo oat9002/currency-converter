@@ -1,8 +1,8 @@
 // Keep every dictionary complete; tests check keys and interpolation placeholders.
 globalThis.CurrencyConverterMessages = {
   "en": {
-    "pageTitle": "THB Currency Converter",
-    "pageDescription": "Convert THB into other currencies with camera scanning.",
+    "pageTitle": "Currency Converter",
+    "pageDescription": "Convert between currencies with camera scanning.",
     "appTitle": "Currency Converter",
     "language": "Language",
     "convertTo": "Convert to",
@@ -35,11 +35,13 @@ globalThis.CurrencyConverterMessages = {
     "ratesStale": "May be outdated",
     "ratesOffline": "Offline",
     "ratesUpdateFailed": "Refresh failed",
-    "ratesUnavailable": "Rates unavailable"
+    "ratesUnavailable": "Rates unavailable",
+    "and": "and",
+    "convert": "Convert"
   },
   "th": {
-    "pageTitle": "เครื่องแปลงสกุลเงินบาท",
-    "pageDescription": "แปลงเงินบาทเป็นสกุลเงินอื่น พร้อมสแกนจำนวนเงินด้วยกล้อง",
+    "pageTitle": "เครื่องแปลงสกุลเงิน",
+    "pageDescription": "แปลงระหว่างสกุลเงิน พร้อมสแกนจำนวนเงินด้วยกล้อง",
     "appTitle": "แปลงสกุลเงิน",
     "language": "ภาษา",
     "convertTo": "แปลงเป็น",
@@ -72,11 +74,13 @@ globalThis.CurrencyConverterMessages = {
     "ratesStale": "ข้อมูลอาจล้าสมัย",
     "ratesOffline": "ออฟไลน์",
     "ratesUpdateFailed": "อัปเดตไม่สำเร็จ",
-    "ratesUnavailable": "ไม่มีข้อมูลอัตราแลกเปลี่ยน"
+    "ratesUnavailable": "ไม่มีข้อมูลอัตราแลกเปลี่ยน",
+    "and": "กับ",
+    "convert": "แปลง"
   },
   "id": {
-    "pageTitle": "Konverter Mata Uang THB",
-    "pageDescription": "Konversi THB ke mata uang lain dengan pemindaian kamera.",
+    "pageTitle": "Konverter Mata Uang",
+    "pageDescription": "Konversi antar mata uang dengan pemindaian kamera.",
     "appTitle": "Konverter Mata Uang",
     "language": "Bahasa",
     "convertTo": "Konversi ke",
@@ -109,11 +113,13 @@ globalThis.CurrencyConverterMessages = {
     "ratesStale": "Mungkin sudah kedaluwarsa",
     "ratesOffline": "Offline",
     "ratesUpdateFailed": "Pembaruan gagal",
-    "ratesUnavailable": "Kurs tidak tersedia"
+    "ratesUnavailable": "Kurs tidak tersedia",
+    "and": "dan",
+    "convert": "Konversi"
   },
   "fil": {
-    "pageTitle": "Pang-convert ng Pera mula THB",
-    "pageDescription": "I-convert ang THB sa ibang pera gamit ang pag-scan ng kamera.",
+    "pageTitle": "Converter ng Pera",
+    "pageDescription": "Mag-convert sa pagitan ng mga pera gamit ang camera scan.",
     "appTitle": "Pang-convert ng Pera",
     "language": "Wika",
     "convertTo": "I-convert sa",
@@ -146,11 +152,13 @@ globalThis.CurrencyConverterMessages = {
     "ratesStale": "Maaaring luma na",
     "ratesOffline": "Offline",
     "ratesUpdateFailed": "Hindi na-update",
-    "ratesUnavailable": "Walang available na palitan"
+    "ratesUnavailable": "Walang available na palitan",
+    "and": "at",
+    "convert": "Magpalit"
   },
   "ja": {
-    "pageTitle": "THB通貨換算",
-    "pageDescription": "カメラで金額を読み取り、タイバーツを他の通貨に換算できます。",
+    "pageTitle": "通貨換算",
+    "pageDescription": "カメラで金額を読み取り、通貨を換算できます。",
     "appTitle": "通貨換算",
     "language": "言語",
     "convertTo": "換算先",
@@ -183,11 +191,13 @@ globalThis.CurrencyConverterMessages = {
     "ratesStale": "古い情報の可能性があります",
     "ratesOffline": "オフライン",
     "ratesUpdateFailed": "更新できませんでした",
-    "ratesUnavailable": "為替レートを取得できません"
+    "ratesUnavailable": "為替レートを取得できません",
+    "and": "と",
+    "convert": "換算"
   },
   "ms": {
-    "pageTitle": "Penukar Mata Wang THB",
-    "pageDescription": "Tukar THB kepada mata wang lain dengan imbasan kamera.",
+    "pageTitle": "Penukar Mata Wang",
+    "pageDescription": "Tukar antara mata wang dengan imbasan kamera.",
     "appTitle": "Penukar Mata Wang",
     "language": "Bahasa",
     "convertTo": "Tukar kepada",
@@ -220,11 +230,13 @@ globalThis.CurrencyConverterMessages = {
     "ratesStale": "Mungkin sudah lapuk",
     "ratesOffline": "Luar talian",
     "ratesUpdateFailed": "Kemas kini gagal",
-    "ratesUnavailable": "Kadar tidak tersedia"
+    "ratesUnavailable": "Kadar tidak tersedia",
+    "and": "dan",
+    "convert": "Tukar"
   },
   "zh-Hans": {
-    "pageTitle": "泰铢汇率换算",
-    "pageDescription": "将泰铢换算为其他货币，支持相机扫描金额。",
+    "pageTitle": "货币换算",
+    "pageDescription": "在不同货币之间换算，支持相机扫描金额。",
     "appTitle": "货币换算",
     "language": "语言",
     "convertTo": "换算为",
@@ -257,11 +269,13 @@ globalThis.CurrencyConverterMessages = {
     "ratesStale": "数据可能已过时",
     "ratesOffline": "离线",
     "ratesUpdateFailed": "更新失败",
-    "ratesUnavailable": "汇率暂不可用"
+    "ratesUnavailable": "汇率暂不可用",
+    "and": "与",
+    "convert": "换算"
   },
   "ko": {
-    "pageTitle": "THB 환율 계산기",
-    "pageDescription": "카메라로 금액을 스캔하고 태국 바트를 다른 통화로 환산하세요.",
+    "pageTitle": "환율 계산기",
+    "pageDescription": "카메라로 금액을 스캔하고 통화 간 환산을 하세요.",
     "appTitle": "환율 계산기",
     "language": "언어",
     "convertTo": "환산 통화",
@@ -294,11 +308,13 @@ globalThis.CurrencyConverterMessages = {
     "ratesStale": "오래된 정보일 수 있습니다",
     "ratesOffline": "오프라인",
     "ratesUpdateFailed": "업데이트 실패",
-    "ratesUnavailable": "환율 정보 없음"
+    "ratesUnavailable": "환율 정보 없음",
+    "and": "및",
+    "convert": "환산"
   },
   "zh-Hant": {
-    "pageTitle": "泰銖匯率換算",
-    "pageDescription": "將泰銖換算為其他貨幣，支援相機掃描金額。",
+    "pageTitle": "貨幣換算",
+    "pageDescription": "在不同貨幣之間換算，支援相機掃描金額。",
     "appTitle": "貨幣換算",
     "language": "語言",
     "convertTo": "換算為",
@@ -331,11 +347,13 @@ globalThis.CurrencyConverterMessages = {
     "ratesStale": "資料可能已過時",
     "ratesOffline": "離線",
     "ratesUpdateFailed": "更新失敗",
-    "ratesUnavailable": "暫無匯率資料"
+    "ratesUnavailable": "暫無匯率資料",
+    "and": "與",
+    "convert": "換算"
   },
   "vi": {
-    "pageTitle": "Chuyển đổi tiền tệ THB",
-    "pageDescription": "Chuyển đổi THB sang các loại tiền tệ khác bằng cách quét camera.",
+    "pageTitle": "Chuyển đổi tiền tệ",
+    "pageDescription": "Chuyển đổi giữa các loại tiền tệ bằng cách quét camera.",
     "appTitle": "Chuyển đổi tiền tệ",
     "language": "Ngôn ngữ",
     "convertTo": "Chuyển sang",
@@ -368,6 +386,8 @@ globalThis.CurrencyConverterMessages = {
     "ratesStale": "Dữ liệu có thể đã cũ",
     "ratesOffline": "Ngoại tuyến",
     "ratesUpdateFailed": "Cập nhật thất bại",
-    "ratesUnavailable": "Không có tỷ giá"
+    "ratesUnavailable": "Không có tỷ giá",
+    "and": "và",
+    "convert": "Chuyển đổi"
   }
 };
